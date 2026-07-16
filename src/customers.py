@@ -6,11 +6,11 @@ from uuid import uuid4
 BALANCE_EXPRESSION = "COALESCE(SUM(CASE WHEN h.hareket_tipi = 'Borç' THEN h.tutar ELSE -h.tutar END), 0)"
 
 
-def create_customer(connection: sqlite3.Connection, *, unvan: str, telefon: str = "", adres: str = "", notlar: str = "") -> int:
+def create_customer(connection: sqlite3.Connection, *, unvan: str, telefon: str = "", adres: str = "", notlar: str = "", eposta: str = "", vergi_dairesi: str = "", vergi_no: str = "") -> int:
     cursor = connection.execute(
-        """INSERT INTO musteriler (kod, unvan, telefon, adres, notlar)
-           VALUES (?, ?, ?, ?, ?)""",
-        (f"CR-{uuid4().hex[:8].upper()}", unvan.strip(), telefon.strip() or None, adres.strip() or None, notlar.strip() or None),
+        """INSERT INTO musteriler (kod, unvan, telefon, adres, notlar, eposta, vergi_dairesi, vergi_no)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (f"CR-{uuid4().hex[:8].upper()}", unvan.strip(), telefon.strip() or None, adres.strip() or None, notlar.strip() or None, eposta.strip() or None, vergi_dairesi.strip() or None, vergi_no.strip() or None),
     )
     connection.commit()
     return cursor.lastrowid

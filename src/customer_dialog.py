@@ -18,9 +18,13 @@ class CustomerDialog(QDialog):
         self.name = QLineEdit()
         self.name.setPlaceholderText("Ad soyad veya firma ünvanı")
         self.phone = QLineEdit()
+        self.email, self.tax_office, self.tax_no = QLineEdit(), QLineEdit(), QLineEdit()
         self.address, self.note = QPlainTextEdit(), QPlainTextEdit()
         form.addRow("Ad soyad / Firma", self.name)
         form.addRow("Telefon", self.phone)
+        form.addRow("E-posta", self.email)
+        form.addRow("Vergi dairesi", self.tax_office)
+        form.addRow("VKN / TCKN", self.tax_no)
         form.addRow("Adres", self.address)
         form.addRow("Not", self.note)
         layout.addLayout(form)
@@ -35,7 +39,7 @@ class CustomerDialog(QDialog):
             self.name.setFocus()
             return
         customer_id = create_customer(self.connection, unvan=self.name.text(), telefon=self.phone.text(),
-                                      adres=self.address.toPlainText(), notlar=self.note.toPlainText())
+                                      adres=self.address.toPlainText(), notlar=self.note.toPlainText(), eposta=self.email.text(), vergi_dairesi=self.tax_office.text(), vergi_no=self.tax_no.text())
         self.done(customer_id)
 
 

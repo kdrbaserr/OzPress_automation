@@ -2,7 +2,7 @@
 import sqlite3
 from images import store_company_logo
 
-DEFAULTS = {"firma_adi": "", "telefon": "", "adres": "", "logo_path": "", "kdv_orani": "0"}
+DEFAULTS = {"firma_adi": "", "telefon": "", "eposta": "", "adres": "", "vergi_dairesi": "", "vergi_no": "", "iban": "", "logo_path": "Resimler/ozsahinLogo.png", "kdv_orani": "0"}
 
 def get_settings(connection: sqlite3.Connection) -> dict[str, str]:
     values = DEFAULTS.copy()

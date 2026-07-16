@@ -10,7 +10,7 @@ class OutputDialog(QDialog):
         super().__init__(parent); self.connection=connection; self.setWindowTitle("PDF Çıktı"); layout=QVBoxLayout(self); form=QFormLayout()
         self.order=QComboBox()
         for row in list_orders(connection): self.order.addItem(f"{row['siparis_no']} — {row['musteri']}",row['id'])
-        self.doc=QComboBox(); self.doc.addItems(["Sipariş", "Teklif"])
+        self.doc=QComboBox(); self.doc.addItems(["Sipariş", "Teklif", "Fatura"])
         self.paper=QComboBox(); self.paper.addItems(["A4", "Termal 58 mm", "Termal 80 mm"])
         form.addRow("Sipariş",self.order); form.addRow("Belge",self.doc); form.addRow("Format",self.paper); layout.addLayout(form)
         cancel=SecondaryButton("Vazgeç"); cancel.clicked.connect(self.reject); save=PrimaryButton("Masaüstüne PDF Kaydet"); save.clicked.connect(self.save); layout.addWidget(page_actions(cancel,save))

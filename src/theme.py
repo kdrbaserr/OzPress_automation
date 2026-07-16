@@ -30,6 +30,8 @@ APPLICATION_STYLESHEET = """
     #cardTitle { font-size: 16px; font-weight: 600; }
     QLineEdit, QComboBox { background: white; border: 1px solid #DDE4EA; border-radius: 6px; padding: 8px; min-height: 18px; }
     QLineEdit:focus, QComboBox:focus { border: 1px solid #17A2A4; }
-    QTableWidget { background: white; border: 1px solid #DDE4EA; border-radius: 8px; gridline-color: #EDF1F4; }
-    QHeaderView::section { background: #EEF3F6; border: 0; padding: 9px; font-weight: 600; }
+    QTableWidget { background: #FFFFFF; color: #132638; alternate-background-color: #F2F6F8; border: 1px solid #C9D5DD; border-radius: 8px; gridline-color: #E1E8ED; selection-background-color: #D4F0EE; selection-color: #102A3A; }
+    QTableWidget::item { color: #132638; background: transparent; padding: 8px; }
+    QTableWidget::item:selected { color: #102A3A; background: #D4F0EE; }
+    QHeaderView::section { background: #DDEBF0; color: #102A3A; border: 0; border-bottom: 1px solid #B8C8D2; padding: 10px; font-weight: 700; }
 """
