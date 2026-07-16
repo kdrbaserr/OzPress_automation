@@ -5,12 +5,12 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMessageBox, QPushButton, QStackedWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from components import Card, DataTable, FormCard, PrimaryButton, SecondaryButton, ThumbnailLabel, page_actions
 from customer_dialog import CustomerDetailDialog, CustomerDialog
-from customers import customer_summary, list_customers
+from customers import customer_summary, list_customers, soft_delete_customer
 from images import resolve_image_path
 from order_dialog import OrderDialog
 from ledger_dialogs import CollectionDialog, StatementDialog
@@ -126,7 +126,7 @@ class MainWindow(QMainWindow):
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
         self.connection = connection
-        self.setWindowTitle("Özpress Otomasyon")
+        self.setWindowTitle("Özşahin Metal Otomasyon")
         self.resize(1160, 720)
         self._buttons: list[QPushButton] = []
         root = QWidget()
@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         logo = QLabel()
         logo.setPixmap(QPixmap(str(Path(__file__).resolve().parent.parent / "Resimler" / "ozsahinLogo.png")).scaled(92, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(logo)
-        brand, tagline = QLabel("ÖZPRESS"), QLabel("OTOMASYON")
+        brand, tagline = QLabel("ÖZŞAHİN METAL"), QLabel("OTOMASYON")
         brand.setObjectName("brandName")
         tagline.setObjectName("brandTagline")
         layout.addWidget(brand)
@@ -220,13 +220,17 @@ class MainWindow(QMainWindow):
         elif page_key == "Cari":
             new_customer = PrimaryButton("+ Yeni Müşteri")
             new_customer.clicked.connect(self.open_customer_dialog)
+            edit_customer = SecondaryButton("Düzenle")
+            edit_customer.clicked.connect(self.edit_selected_customer)
+            delete_customer = SecondaryButton("Sil")
+            delete_customer.clicked.connect(self.delete_selected_customer)
             detail = SecondaryButton("Detay")
             detail.clicked.connect(self.open_customer_detail)
             collection = SecondaryButton("Tahsilat Gir")
             collection.clicked.connect(self.open_collection_dialog)
             statement = SecondaryButton("Ekstre")
             statement.clicked.connect(self.open_statement)
-            layout.addWidget(page_actions(statement, collection, detail, new_customer))
+            layout.addWidget(page_actions(delete_customer, edit_customer, statement, collection, detail, new_customer))
             cards = QHBoxLayout()
             self.customer_count_card = self._summary_card("Müşteri", "0")
             self.customer_debt_card = self._summary_card("Borçlu", "0")
@@ -267,7 +271,14 @@ class MainWindow(QMainWindow):
                 cards.addWidget(card)
             layout.addLayout(cards)
             layout.addStretch()
-        return page
+        scroll_area = QScrollArea()
+        scroll_area.setObjectName("pageScrollArea")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setWidget(page)
+        return scroll_area
 
     def open_product_dialog(self) -> None:
         dialog = ProductDialog(self.connection, parent=self)
@@ -336,7 +347,20 @@ class MainWindow(QMainWindow):
         return card
 
     def open_customer_dialog(self) -> None:
-        if CustomerDialog(self.connection, self).exec():
+        if CustomerDialog(self.connection, parent=self).exec():
+            self.refresh_customers()
+
+    def edit_selected_customer(self) -> None:
+        customer_id = self.selected_customer_id()
+        if customer_id is not None and CustomerDialog(self.connection, customer_id, self).exec():
+            self.refresh_customers()
+
+    def delete_selected_customer(self) -> None:
+        customer_id = self.selected_customer_id()
+        if customer_id is None:
+            return
+        if QMessageBox.question(self, "Müşteriyi sil", "Müşteri listeden kaldırılacak. Devam edilsin mi?") == QMessageBox.StandardButton.Yes:
+            soft_delete_customer(self.connection, customer_id)
             self.refresh_customers()
 
     def selected_customer_id(self) -> int | None:
