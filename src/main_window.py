@@ -1,16 +1,18 @@
+from pathlib import Path
+
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton,
-    QStackedWidget, QVBoxLayout, QWidget,
-)
+from PySide6.QtGui import QPixmap
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
+
+from components import Card, DataTable, FormCard, PrimaryButton, SecondaryButton, page_actions
 
 
 PAGES = [
-    ("Ana Menü", "Özet", "Hızlı erişim ve güncel durum"),
+    ("Ana Menü", "Genel Bakış", "Yerel veriler ve hızlı işlemler"),
     ("Katalog", "Katalog", "Ürün ve hizmet kartları"),
     ("Sipariş", "Sipariş", "Sipariş oluşturma ve takip"),
     ("Cari", "Cari", "Müşteri hesapları ve hareketleri"),
-    ("Çıktı", "Çıktı", "Teklif, sipariş ve rapor çıktıları"),
+    ("Ayarlar", "Ayarlar", "Uygulama tercihleri ve yerel dosya yönetimi"),
 ]
 
 
@@ -18,51 +20,51 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Özpress Otomasyon")
-        self.resize(1100, 700)
+        self.resize(1160, 720)
         self._buttons: list[QPushButton] = []
 
         root = QWidget()
         layout = QHBoxLayout(root)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-
-        menu = QFrame()
-        menu.setObjectName("menu")
-        menu.setFixedWidth(230)
-        menu_layout = QVBoxLayout(menu)
-        menu_layout.setContentsMargins(18, 24, 18, 24)
-        title = QLabel("ÖZPRESS\nOTOMASYON")
-        title.setObjectName("brand")
-        menu_layout.addWidget(title)
-        menu_layout.addSpacing(34)
-
+        layout.addWidget(self._create_sidebar())
         self.pages = QStackedWidget()
-        for index, (button_text, title_text, subtitle) in enumerate(PAGES):
-            button = QPushButton(button_text)
-            button.setCheckable(True)
-            button.clicked.connect(lambda checked, i=index: self.show_page(i))
-            self._buttons.append(button)
-            menu_layout.addWidget(button)
-            self.pages.addWidget(self._create_page(title_text, subtitle))
-        menu_layout.addStretch()
-
-        layout.addWidget(menu)
+        for title, heading, subtitle in PAGES:
+            self.pages.addWidget(self._create_page(title, heading, subtitle))
         layout.addWidget(self.pages, 1)
         self.setCentralWidget(root)
         self.show_page(0)
-        self.setStyleSheet("""
-            #menu { background: #132638; }
-            #brand { color: #ffffff; font-size: 20px; font-weight: 700; letter-spacing: 1px; }
-            QPushButton { color: #d7e3ec; border: 0; text-align: left; padding: 12px; border-radius: 6px; font-size: 14px; }
-            QPushButton:hover { background: #21425e; }
-            QPushButton:checked { background: #17a2a4; color: white; font-weight: 600; }
-            #page { background: #f5f7fa; }
-            #pageTitle { color: #132638; font-size: 28px; font-weight: 700; }
-            #subtitle { color: #5c6b76; font-size: 15px; }
-            #placeholder { background: white; border: 1px solid #dde4ea; border-radius: 10px; color: #72808b; }
-        """)
 
-    def _create_page(self, title: str, subtitle: str) -> QWidget:
+    def _create_sidebar(self) -> QFrame:
+        sidebar = QFrame()
+        sidebar.setObjectName("sidebar")
+        sidebar.setFixedWidth(240)
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(18, 24, 18, 24)
+        logo = QLabel()
+        logo.setPixmap(QPixmap(str(Path(__file__).resolve().parent.parent / "Resimler" / "ozpress-logo.svg")).scaled(42, 42, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        layout.addWidget(logo)
+        brand = QLabel("ÖZPRESS")
+        brand.setObjectName("brandName")
+        tagline = QLabel("OTOMASYON")
+        tagline.setObjectName("brandTagline")
+        layout.addWidget(brand)
+        layout.addWidget(tagline)
+        layout.addSpacing(30)
+        for index, (label, _, _) in enumerate(PAGES):
+            button = QPushButton(label)
+            button.setObjectName("navButton")
+            button.setCheckable(True)
+            button.clicked.connect(lambda checked, i=index: self.show_page(i))
+            self._buttons.append(button)
+            layout.addWidget(button)
+        layout.addStretch()
+        offline = QLabel("● ÇEVRİMDIŞI MOD")
+        offline.setStyleSheet("color: #78D5C9; font-size: 11px; font-weight: 600;")
+        layout.addWidget(offline)
+        return sidebar
+
+    def _create_page(self, page_key: str, title: str, subtitle: str) -> QWidget:
         page = QFrame()
         page.setObjectName("page")
         layout = QVBoxLayout(page)
@@ -71,13 +73,41 @@ class MainWindow(QMainWindow):
         heading.setObjectName("pageTitle")
         description = QLabel(subtitle)
         description.setObjectName("subtitle")
-        placeholder = QLabel("Bu alan sonraki aşamada ilgili liste, form ve işlemlerle doldurulacaktır.")
-        placeholder.setObjectName("placeholder")
-        placeholder.setAlignment(Qt.AlignCenter)
         layout.addWidget(heading)
         layout.addWidget(description)
-        layout.addSpacing(22)
-        layout.addWidget(placeholder, 1)
+        layout.addSpacing(18)
+
+        if page_key == "Katalog":
+            layout.addWidget(page_actions(SecondaryButton("Filtrele"), PrimaryButton("+ Yeni Ürün")))
+            table = DataTable(["Kod", "Ürün adı", "Birim", "Fiyat", "Görsel"])
+            table.add_demo_row(["UR-001", "Örnek Ürün", "Adet", "0,00 ₺", "Yok"])
+            layout.addWidget(table)
+        elif page_key == "Sipariş":
+            layout.addWidget(page_actions(SecondaryButton("Taslaklar"), PrimaryButton("+ Yeni Sipariş")))
+            table = DataTable(["Sipariş No", "Müşteri", "Tarih", "Durum", "Toplam"])
+            layout.addWidget(table)
+        elif page_key == "Cari":
+            content = QHBoxLayout()
+            content.addWidget(FormCard("Yeni Müşteri", ["Kod", "Ünvan", "Telefon"]))
+            table = DataTable(["Cari kod", "Ünvan", "Bakiye"])
+            content.addWidget(table, 1)
+            layout.addLayout(content)
+        elif page_key == "Ayarlar":
+            card = Card("Yerel çalışma modu")
+            card.layout.addWidget(QLabel("Bu uygulama internet bağlantısı kullanmaz. Tüm veriler cihazdaki SQLite dosyasında saklanır."))
+            card.layout.addWidget(SecondaryButton("Veritabanı klasörünü aç"))
+            layout.addWidget(card)
+            layout.addStretch()
+        else:
+            cards = QHBoxLayout()
+            for title_text, value in [("Ürün", "0"), ("Açık Sipariş", "0"), ("Cari", "0")]:
+                card = Card(title_text)
+                number = QLabel(value)
+                number.setStyleSheet("font-size: 32px; font-weight: 700; color: #17A2A4;")
+                card.layout.addWidget(number)
+                cards.addWidget(card)
+            layout.addLayout(cards)
+            layout.addStretch()
         return page
 
     def show_page(self, index: int) -> None:
