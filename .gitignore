@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Runtime data
+db/*.db
+output/*
+!output/.gitkeep
