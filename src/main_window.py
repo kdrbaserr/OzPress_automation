@@ -13,6 +13,8 @@ from customer_dialog import CustomerDetailDialog, CustomerDialog
 from customers import customer_summary, list_customers
 from images import resolve_image_path
 from order_dialog import OrderDialog
+from ledger_dialogs import CollectionDialog, StatementDialog
+from orders import confirm_order, list_orders
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
 
 
@@ -206,14 +208,22 @@ class MainWindow(QMainWindow):
         elif page_key == "Sipariş":
             new_order = PrimaryButton("+ Yeni Sipariş / Proje")
             new_order.clicked.connect(self.open_order_dialog)
-            layout.addWidget(page_actions(SecondaryButton("Taslaklar"), new_order))
-            layout.addWidget(DataTable(["Sipariş No", "Müşteri", "Tarih", "Durum", "Toplam"]))
+            confirm = SecondaryButton("Siparişi Onayla")
+            confirm.clicked.connect(self.confirm_selected_order)
+            layout.addWidget(page_actions(confirm, new_order))
+            self.order_table = DataTable(["Sipariş No", "Müşteri", "Tarih", "Durum", "Toplam"])
+            layout.addWidget(self.order_table)
+            self.refresh_orders()
         elif page_key == "Cari":
             new_customer = PrimaryButton("+ Yeni Müşteri")
             new_customer.clicked.connect(self.open_customer_dialog)
             detail = SecondaryButton("Detay")
             detail.clicked.connect(self.open_customer_detail)
-            layout.addWidget(page_actions(detail, new_customer))
+            collection = SecondaryButton("Tahsilat Gir")
+            collection.clicked.connect(self.open_collection_dialog)
+            statement = SecondaryButton("Ekstre")
+            statement.clicked.connect(self.open_statement)
+            layout.addWidget(page_actions(statement, collection, detail, new_customer))
             cards = QHBoxLayout()
             self.customer_count_card = self._summary_card("Müşteri", "0")
             self.customer_debt_card = self._summary_card("Borçlu", "0")
@@ -277,7 +287,36 @@ class MainWindow(QMainWindow):
             self.refresh_catalog()
 
     def open_order_dialog(self) -> None:
-        OrderDialog(self.connection, self).exec()
+        if OrderDialog(self.connection, self).exec():
+            self.refresh_orders()
+
+    def selected_order_id(self) -> int | None:
+        items = self.order_table.selectedItems()
+        return self.order_table.item(items[0].row(), 0).data(Qt.UserRole) if items else None
+
+    def refresh_orders(self) -> None:
+        self.order_table.setRowCount(0)
+        for order in list_orders(self.connection):
+            row = self.order_table.rowCount()
+            self.order_table.insertRow(row)
+            values = [order["siparis_no"], order["musteri"], order["siparis_tarihi"], order["durum"], f"{float(order['genel_toplam']):.2f} ₺"]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column == 0:
+                    item.setData(Qt.UserRole, order["id"])
+                self.order_table.setItem(row, column, item)
+
+    def confirm_selected_order(self) -> None:
+        order_id = self.selected_order_id()
+        if order_id is None:
+            return
+        try:
+            confirm_order(self.connection, order_id)
+        except ValueError as error:
+            QMessageBox.warning(self, "Sipariş onaylanamadı", str(error))
+            return
+        self.refresh_orders()
+        self.refresh_customers()
 
     @staticmethod
     def _summary_card(title: str, value: str) -> Card:
@@ -301,6 +340,15 @@ class MainWindow(QMainWindow):
         customer_id = self.selected_customer_id()
         if customer_id is not None:
             CustomerDetailDialog(self.connection, customer_id, self).exec()
+
+    def open_collection_dialog(self) -> None:
+        if CollectionDialog(self.connection, self.selected_customer_id(), self).exec():
+            self.refresh_customers()
+
+    def open_statement(self) -> None:
+        customer_id = self.selected_customer_id()
+        if customer_id is not None:
+            StatementDialog(self.connection, customer_id, self).exec()
 
     def refresh_customers(self) -> None:
         customers = list_customers(self.connection, search=self.customer_search.text(),

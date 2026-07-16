@@ -40,3 +40,34 @@ def create_order(
             [(order_id, str(item["aciklama"]), float(item["tutar"]), float(item["tutar"])) for item in extra_items],
         )
     return order_id
+
+
+def list_orders(connection: sqlite3.Connection) -> list[sqlite3.Row]:
+    connection.row_factory = sqlite3.Row
+    return connection.execute(
+        """SELECT s.id, s.siparis_no, m.unvan AS musteri, s.siparis_tarihi, s.durum, s.genel_toplam
+           FROM siparisler s JOIN musteriler m ON m.id = s.musteri_id ORDER BY s.created_at DESC"""
+    ).fetchall()
+
+
+def confirm_order(connection: sqlite3.Connection, order_id: int) -> None:
+    """Siparişi onaylar ve tek seferlik Borç cari hareketini oluşturur."""
+    connection.row_factory = sqlite3.Row
+    order = connection.execute(
+        "SELECT id, musteri_id, siparis_no, genel_toplam FROM siparisler WHERE id = ?", (order_id,)
+    ).fetchone()
+    if not order:
+        raise ValueError("Sipariş bulunamadı.")
+    if float(order["genel_toplam"]) <= 0:
+        raise ValueError("Toplamı sıfır olan sipariş onaylanamaz.")
+    with connection:
+        connection.execute("UPDATE siparisler SET durum = 'Onaylandı', updated_at = CURRENT_TIMESTAMP WHERE id = ?", (order_id,))
+        exists = connection.execute(
+            "SELECT 1 FROM cari_hareketler WHERE siparis_id = ? AND hareket_tipi = 'Borç'", (order_id,)
+        ).fetchone()
+        if not exists:
+            connection.execute(
+                """INSERT INTO cari_hareketler (musteri_id, siparis_id, hareket_tipi, tutar, aciklama)
+                   VALUES (?, ?, 'Borç', ?, ?)""",
+                (order["musteri_id"], order_id, order["genel_toplam"], f"Onaylanan sipariş: {order['siparis_no']}"),
+            )

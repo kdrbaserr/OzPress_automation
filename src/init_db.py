@@ -28,6 +28,9 @@ def _apply_schema_upgrades(connection: sqlite3.Connection) -> None:
     customer_columns = {row[1] for row in connection.execute("PRAGMA table_info(musteriler)")}
     if "notlar" not in customer_columns:
         connection.execute("ALTER TABLE musteriler ADD COLUMN notlar TEXT")
+    ledger_columns = {row[1] for row in connection.execute("PRAGMA table_info(cari_hareketler)")}
+    if "odeme_sekli" not in ledger_columns:
+        connection.execute("ALTER TABLE cari_hareketler ADD COLUMN odeme_sekli TEXT")
 
 
 if __name__ == "__main__":

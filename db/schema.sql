@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS cari_hareketler (
     hareket_tarihi TEXT NOT NULL DEFAULT CURRENT_DATE,
     hareket_tipi TEXT NOT NULL CHECK (hareket_tipi IN ('Borç', 'Alacak')),
     tutar REAL NOT NULL CHECK (tutar > 0),
+    odeme_sekli TEXT,
     aciklama TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (musteri_id) REFERENCES musteriler(id) ON DELETE RESTRICT ON UPDATE CASCADE,
