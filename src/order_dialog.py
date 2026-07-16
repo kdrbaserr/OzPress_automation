@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from components import PrimaryButton, SecondaryButton, page_actions
 from orders import create_order, list_customers
 from products import list_products, update_catalog_price
+from weight_calculator import WeightCalculatorDialog
 
 
 class OrderDialog(QDialog):
@@ -41,11 +42,14 @@ class OrderDialog(QDialog):
         self.quantity.setDecimals(2)
         add_button = PrimaryButton("Sepete Ekle")
         add_button.clicked.connect(self.add_to_cart)
+        calculator_button = SecondaryButton("Ağırlık Hesapla")
+        calculator_button.clicked.connect(self.open_weight_calculator)
         product_row.addWidget(QLabel("Katalog ürünü"))
         product_row.addWidget(self.product, 1)
         product_row.addWidget(QLabel("Miktar"))
         product_row.addWidget(self.quantity)
         product_row.addWidget(add_button)
+        product_row.addWidget(calculator_button)
         layout.addLayout(product_row)
 
         extra_row = QHBoxLayout()
@@ -101,6 +105,9 @@ class OrderDialog(QDialog):
         self.cart.append({"tip": "urun", "urun_id": product["id"], "ad": product["ad"], "miktar": self.quantity.value(),
                           "birim_fiyat": product["fiyat"], "katalog_fiyat": product["fiyat"]})
         self.render_cart()
+
+    def open_weight_calculator(self) -> None:
+        WeightCalculatorDialog(self).exec()
 
     def add_extra_item(self) -> None:
         description = self.extra_description.text().strip()
