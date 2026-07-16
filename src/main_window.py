@@ -148,7 +148,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(18, 24, 18, 24)
         logo = QLabel()
-        logo.setPixmap(QPixmap(str(Path(__file__).resolve().parent.parent / "Resimler" / "ozpress-logo.svg")).scaled(42, 42, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        logo.setPixmap(QPixmap(str(Path(__file__).resolve().parent.parent / "Resimler" / "ozsahinLogo.png")).scaled(92, 72, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         layout.addWidget(logo)
         brand, tagline = QLabel("ÖZPRESS"), QLabel("OTOMASYON")
         brand.setObjectName("brandName")
@@ -250,8 +250,8 @@ class MainWindow(QMainWindow):
             self.refresh_customers()
         elif page_key == "Ayarlar":
             values=get_settings(self.connection); card = Card("Firma bilgileri")
-            self.firma_adi, self.firma_tel, self.firma_adres, self.firma_kdv = QLineEdit(values['firma_adi']), QLineEdit(values['telefon']), QLineEdit(values['adres']), QLineEdit(values['kdv_orani'])
-            for label,field in [("Firma adı",self.firma_adi),("Telefon",self.firma_tel),("Adres",self.firma_adres),("KDV oranı (%)",self.firma_kdv)]: card.layout.addWidget(QLabel(label)); card.layout.addWidget(field)
+            self.firma_adi, self.firma_tel, self.firma_eposta, self.firma_adres, self.firma_vergi_dairesi, self.firma_vergi_no, self.firma_iban, self.firma_kdv = QLineEdit(values['firma_adi']), QLineEdit(values['telefon']), QLineEdit(values['eposta']), QLineEdit(values['adres']), QLineEdit(values['vergi_dairesi']), QLineEdit(values['vergi_no']), QLineEdit(values['iban']), QLineEdit(values['kdv_orani'])
+            for label,field in [("Firma adı",self.firma_adi),("Telefon",self.firma_tel),("E-posta",self.firma_eposta),("Adres",self.firma_adres),("Vergi dairesi",self.firma_vergi_dairesi),("VKN",self.firma_vergi_no),("IBAN",self.firma_iban),("KDV oranı (%)",self.firma_kdv)]: card.layout.addWidget(QLabel(label)); card.layout.addWidget(field)
             logo=SecondaryButton("Logo Yükle"); logo.clicked.connect(self.select_company_logo); save=PrimaryButton("Ayarları Kaydet"); save.clicked.connect(self.save_company_settings); card.layout.addWidget(page_actions(logo,save))
             layout.addWidget(card)
             layout.addStretch()
@@ -367,7 +367,7 @@ class MainWindow(QMainWindow):
     def save_company_settings(self) -> None:
         try: kdv=float(self.firma_kdv.text().replace(',','.')); assert kdv>=0
         except (ValueError,AssertionError): QMessageBox.warning(self,"Geçersiz KDV","KDV oranı negatif olamaz."); return
-        save_settings(self.connection,{"firma_adi":self.firma_adi.text(),"telefon":self.firma_tel.text(),"adres":self.firma_adres.text(),"kdv_orani":str(kdv)},getattr(self,'company_logo_source',None))
+        save_settings(self.connection,{"firma_adi":self.firma_adi.text(),"telefon":self.firma_tel.text(),"eposta":self.firma_eposta.text(),"adres":self.firma_adres.text(),"vergi_dairesi":self.firma_vergi_dairesi.text(),"vergi_no":self.firma_vergi_no.text(),"iban":self.firma_iban.text(),"kdv_orani":str(kdv)},getattr(self,'company_logo_source',None))
 
     def refresh_customers(self) -> None:
         customers = list_customers(self.connection, search=self.customer_search.text(),
