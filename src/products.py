@@ -48,6 +48,15 @@ def soft_delete_product(connection: sqlite3.Connection, product_id: int) -> None
     connection.commit()
 
 
+def update_catalog_price(connection: sqlite3.Connection, product_id: int, birim_fiyat: float) -> None:
+    """Yalnızca kullanıcı onayıyla ürün kartının sabit fiyatını günceller."""
+    connection.execute(
+        "UPDATE urunler SET birim_fiyat = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND aktif = 1",
+        (birim_fiyat, product_id),
+    )
+    connection.commit()
+
+
 def get_product(connection: sqlite3.Connection, product_id: int) -> sqlite3.Row | None:
     connection.row_factory = sqlite3.Row
     return connection.execute("SELECT * FROM urunler WHERE id = ? AND aktif = 1", (product_id,)).fetchone()
