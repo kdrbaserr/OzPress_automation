@@ -27,6 +27,17 @@ def store_product_image(source_path: str | Path) -> str:
     return destination.relative_to(APP_DIRECTORY).as_posix()
 
 
+def store_company_logo(source_path: str | Path) -> str:
+    """Firma logosunu yerel Resimler klasörüne benzersiz adla kopyalar."""
+    source = Path(source_path)
+    if not source.is_file() or source.suffix.lower() not in ALLOWED_IMAGE_EXTENSIONS:
+        raise ValueError("Geçerli bir logo görseli seçin.")
+    IMAGES_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    destination = IMAGES_DIRECTORY / f"firma_logo_{uuid4().hex}{source.suffix.lower()}"
+    shutil.copy2(source, destination)
+    return destination.relative_to(APP_DIRECTORY).as_posix()
+
+
 def resolve_image_path(stored_path: str | None) -> Path | None:
     """Veritabanındaki göreli görsel yolunu güvenli bir yerel dosya yoluna çevirir."""
     if not stored_path:
