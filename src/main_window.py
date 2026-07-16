@@ -15,6 +15,8 @@ from images import resolve_image_path
 from order_dialog import OrderDialog
 from ledger_dialogs import CollectionDialog, StatementDialog
 from orders import confirm_order, list_orders
+from output_dialog import OutputDialog
+from settings import get_settings, save_settings
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
 
 
@@ -23,6 +25,7 @@ PAGES = [
     ("Katalog", "Katalog", "Ürün ve hizmet kartları"),
     ("Sipariş", "Sipariş", "Sipariş oluşturma ve takip"),
     ("Cari", "Cari", "Müşteri hesapları ve hareketleri"),
+    ("Çıktı", "Çıktı", "Sipariş ve teklif PDF çıktıları"),
     ("Ayarlar", "Ayarlar", "Uygulama tercihleri ve yerel dosya yönetimi"),
 ]
 
@@ -246,10 +249,14 @@ class MainWindow(QMainWindow):
             layout.addWidget(self.customer_table)
             self.refresh_customers()
         elif page_key == "Ayarlar":
-            card = Card("Yerel çalışma modu")
-            card.layout.addWidget(QLabel("Bu uygulama internet bağlantısı kullanmaz. Tüm veriler cihazdaki SQLite dosyasında saklanır."))
+            values=get_settings(self.connection); card = Card("Firma bilgileri")
+            self.firma_adi, self.firma_tel, self.firma_adres, self.firma_kdv = QLineEdit(values['firma_adi']), QLineEdit(values['telefon']), QLineEdit(values['adres']), QLineEdit(values['kdv_orani'])
+            for label,field in [("Firma adı",self.firma_adi),("Telefon",self.firma_tel),("Adres",self.firma_adres),("KDV oranı (%)",self.firma_kdv)]: card.layout.addWidget(QLabel(label)); card.layout.addWidget(field)
+            logo=SecondaryButton("Logo Yükle"); logo.clicked.connect(self.select_company_logo); save=PrimaryButton("Ayarları Kaydet"); save.clicked.connect(self.save_company_settings); card.layout.addWidget(page_actions(logo,save))
             layout.addWidget(card)
             layout.addStretch()
+        elif page_key == "Çıktı":
+            card=Card("Sipariş / teklif çıktısı"); card.layout.addWidget(QLabel("A4, 58 mm ve 80 mm termal PDF şablonları desteklenir.")); button=PrimaryButton("Masaüstüne PDF Kaydet"); button.clicked.connect(self.open_output_dialog); card.layout.addWidget(button); layout.addWidget(card); layout.addStretch()
         else:
             cards = QHBoxLayout()
             for card_title, value in [("Ürün", "0"), ("Açık Sipariş", "0"), ("Cari", "0")]:
@@ -349,6 +356,18 @@ class MainWindow(QMainWindow):
         customer_id = self.selected_customer_id()
         if customer_id is not None:
             StatementDialog(self.connection, customer_id, self).exec()
+
+    def open_output_dialog(self) -> None:
+        OutputDialog(self.connection, self).exec()
+
+    def select_company_logo(self) -> None:
+        path,_=QFileDialog.getOpenFileName(self,"Firma logosu seç","","Görseller (*.png *.jpg *.jpeg *.webp *.bmp *.svg)")
+        self.company_logo_source=path or None
+
+    def save_company_settings(self) -> None:
+        try: kdv=float(self.firma_kdv.text().replace(',','.')); assert kdv>=0
+        except (ValueError,AssertionError): QMessageBox.warning(self,"Geçersiz KDV","KDV oranı negatif olamaz."); return
+        save_settings(self.connection,{"firma_adi":self.firma_adi.text(),"telefon":self.firma_tel.text(),"adres":self.firma_adres.text(),"kdv_orani":str(kdv)},getattr(self,'company_logo_source',None))
 
     def refresh_customers(self) -> None:
         customers = list_customers(self.connection, search=self.customer_search.text(),

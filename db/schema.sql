@@ -1,5 +1,10 @@
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS ayarlar (
+    anahtar TEXT PRIMARY KEY,
+    deger TEXT
+);
+
 -- Ürün kartları. image_path, Resimler klasörüne göre göreli veya tam yol tutabilir.
 CREATE TABLE IF NOT EXISTS urunler (
     id INTEGER PRIMARY KEY,
