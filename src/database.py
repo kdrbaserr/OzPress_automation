@@ -1,17 +1,8 @@
-"""SQLite bağlantısı ve başlangıç şemasını yönetir."""
-from pathlib import Path
-import sqlite3
+"""Uygulamanın SQLite bağlantı erişimi."""
+from init_db import DATABASE_PATH as DB_PATH
+from init_db import create_database
 
 
-ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = ROOT / "db" / "ozpress.db"
-SCHEMA_PATH = ROOT / "db" / "schema.sql"
-
-
-def initialize_database() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    connection = sqlite3.connect(DB_PATH)
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
-    connection.commit()
-    return connection
+def initialize_database():
+    """İlk çalıştırmada şemayı kurar ve foreign key açık bağlantı döndürür."""
+    return create_database()
