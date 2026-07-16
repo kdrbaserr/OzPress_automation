@@ -25,7 +25,12 @@ def calculate_weight_price(weight_kg: float, unit_price: float) -> float:
 
 
 class WeightCalculatorDialog(QDialog):
-    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        parent: QWidget | None = None,
+        allow_add_to_cart: bool = True,
+    ) -> None:
         super().__init__(parent)
         self.connection = connection
         self.cart_item: dict[str, float | str] | None = None
@@ -39,6 +44,7 @@ class WeightCalculatorDialog(QDialog):
         self.thickness = self._dimension_input()
         self.quantity = QSpinBox()
         self.quantity.setRange(0, 1_000_000)
+        self.quantity.setSingleStep(1)
         self.quantity.setSpecialValueText("Geçerli adet girin")
         form.addRow("En (mm)", self.width)
         form.addRow("Boy (mm)", self.length)
@@ -58,6 +64,7 @@ class WeightCalculatorDialog(QDialog):
         self.kilo_price = QDoubleSpinBox()
         self.kilo_price.setRange(0, 10_000_000)
         self.kilo_price.setDecimals(2)
+        self.kilo_price.setSingleStep(1.0)
         self.kilo_price.setPrefix("₺ ")
         form.addRow("Kilo fiyatı kaynağı", self.price_source)
         form.addRow("Kilo fiyatı", self.kilo_price)
@@ -79,9 +86,12 @@ class WeightCalculatorDialog(QDialog):
         layout.addWidget(result_card)
         close_button = SecondaryButton("Kapat")
         close_button.clicked.connect(self.accept)
-        add_button = PrimaryButton("Hesapla ve Sepete Ekle")
-        add_button.clicked.connect(self.add_to_cart)
-        layout.addWidget(page_actions(close_button, add_button))
+        if allow_add_to_cart:
+            add_button = PrimaryButton("Hesapla ve Sepete Ekle")
+            add_button.clicked.connect(self.add_to_cart)
+            layout.addWidget(page_actions(close_button, add_button))
+        else:
+            layout.addWidget(page_actions(close_button))
 
         for input_widget in (self.width, self.length, self.thickness, self.quantity):
             input_widget.valueChanged.connect(self.update_result)
@@ -94,6 +104,7 @@ class WeightCalculatorDialog(QDialog):
         input_widget = QDoubleSpinBox()
         input_widget.setRange(0, 10_000_000)
         input_widget.setDecimals(2)
+        input_widget.setSingleStep(1.0)
         input_widget.setSuffix(" mm")
         input_widget.setSpecialValueText("Geçerli ölçü girin")
         input_widget.setToolTip("Negatif değer kabul edilmez; sıfırdan büyük bir ölçü girin.")

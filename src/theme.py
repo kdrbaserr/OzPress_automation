@@ -31,7 +31,15 @@ APPLICATION_STYLESHEET = """
     #subtitle { color: #5C6B76; font-size: 14px; }
     #card { background: #FFFFFF; border: 1px solid #DDE4EA; border-radius: 10px; }
     #cardTitle { font-size: 16px; font-weight: 600; }
-    QLineEdit, QComboBox, QPlainTextEdit, QSpinBox, QDoubleSpinBox, QDateEdit { background: #FFFFFF; color: #132638; border: 1px solid #AFC0CA; border-radius: 6px; padding: 8px; min-height: 18px; selection-background-color: #17A2A4; selection-color: white; }
+    QLineEdit, QComboBox, QPlainTextEdit, QDateEdit { background: #FFFFFF; color: #132638; border: 1px solid #AFC0CA; border-radius: 6px; padding: 8px; min-height: 18px; selection-background-color: #17A2A4; selection-color: white; }
+    QSpinBox, QDoubleSpinBox { background: #FFFFFF; color: #132638; border: 1px solid #AFC0CA; border-radius: 6px; padding: 8px; padding-right: 32px; min-height: 18px; selection-background-color: #17A2A4; selection-color: white; }
+    QSpinBox::up-button, QDoubleSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; width: 28px; background: #E8F3F3; border-left: 1px solid #AFC0CA; border-bottom: 1px solid #AFC0CA; border-top-right-radius: 5px; }
+    QSpinBox::down-button, QDoubleSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; width: 28px; background: #E8F3F3; border-left: 1px solid #AFC0CA; border-bottom-right-radius: 5px; }
+    QSpinBox::up-arrow, QDoubleSpinBox::up-arrow { image: url(Resimler/spin-arrow-up.svg); width: 12px; height: 8px; }
+    QSpinBox::down-arrow, QDoubleSpinBox::down-arrow { image: url(Resimler/spin-arrow-down.svg); width: 12px; height: 8px; }
+    QSpinBox::up-arrow:disabled, QDoubleSpinBox::up-arrow:disabled, QSpinBox::down-arrow:disabled, QDoubleSpinBox::down-arrow:disabled { opacity: 0.35; }
+    QSpinBox::up-button:hover, QSpinBox::down-button:hover, QDoubleSpinBox::up-button:hover, QDoubleSpinBox::down-button:hover { background: #BFE5E2; }
+    QSpinBox::up-button:pressed, QSpinBox::down-button:pressed, QDoubleSpinBox::up-button:pressed, QDoubleSpinBox::down-button:pressed { background: #8FD1CC; }
     QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus { border: 2px solid #17A2A4; }
     QComboBox QAbstractItemView { background: #FFFFFF; color: #132638; selection-background-color: #D4F0EE; selection-color: #132638; }
     QDialog QPushButton#secondaryButton { background: #FFFFFF; color: #132638; border: 1px solid #8EA4B2; }

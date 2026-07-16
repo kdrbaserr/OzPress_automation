@@ -40,6 +40,7 @@ class OrderDialog(QDialog):
         self.quantity.setRange(0.01, 1_000_000)
         self.quantity.setValue(1)
         self.quantity.setDecimals(2)
+        self.quantity.setSingleStep(1.0)
         add_button = PrimaryButton("Sepete Ekle")
         add_button.clicked.connect(self.add_to_cart)
         calculator_button = SecondaryButton("Ağırlık Hesapla")
@@ -58,6 +59,7 @@ class OrderDialog(QDialog):
         self.extra_amount = QDoubleSpinBox()
         self.extra_amount.setRange(0.01, 10_000_000)
         self.extra_amount.setDecimals(2)
+        self.extra_amount.setSingleStep(1.0)
         add_extra = SecondaryButton("Serbest Kalem Ekle")
         add_extra.clicked.connect(self.add_extra_item)
         extra_row.addWidget(QLabel("Serbest kalem"))
@@ -140,12 +142,14 @@ class OrderDialog(QDialog):
         amount = QDoubleSpinBox()
         amount.setRange(0.01, 1_000_000)
         amount.setDecimals(2)
+        amount.setSingleStep(1.0)
         amount.setValue(float(item["miktar"]))
         amount.valueChanged.connect(lambda value, i=row: self.update_quantity(i, value))
         self.cart_table.setCellWidget(row, 1, amount)
         price = QDoubleSpinBox()
         price.setRange(0, 10_000_000)
         price.setDecimals(2)
+        price.setSingleStep(1.0)
         price.setPrefix("₺ ")
         price.setValue(float(item["birim_fiyat"]))
         price.editingFinished.connect(lambda i=row, widget=price: self.update_unit_price(i, widget.value()))
@@ -169,7 +173,8 @@ class OrderDialog(QDialog):
 
     def update_quantity(self, row: int, amount: float) -> None:
         self.cart[row]["miktar"] = amount
-        self.render_cart()
+        self.cart_table.setItem(row, 3, QTableWidgetItem(f"{self.line_total(self.cart[row]):.2f} ₺"))
+        self.update_total_label()
 
     def update_unit_price(self, row: int, price: float) -> None:
         item = self.cart[row]
@@ -183,7 +188,11 @@ class OrderDialog(QDialog):
         if answer == QMessageBox.StandardButton.Yes:
             update_catalog_price(self.connection, int(item["urun_id"]), price)
             item["katalog_fiyat"] = price
-        self.render_cart()
+        self.cart_table.setItem(row, 3, QTableWidgetItem(f"{self.line_total(item):.2f} ₺"))
+        self.update_total_label()
+
+    def update_total_label(self) -> None:
+        self.total_label.setText(f"Ara toplam: {self.cart_total():.2f} ₺")
 
     def remove_cart_line(self, row: int) -> None:
         self.cart.pop(row)

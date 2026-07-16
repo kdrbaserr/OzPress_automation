@@ -18,12 +18,14 @@ from orders import confirm_order, list_orders
 from output_dialog import OutputDialog
 from settings import get_settings, save_settings
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
+from weight_calculator import WeightCalculatorDialog
 
 
 PAGES = [
     ("Ana Menü", "Genel Bakış", "Yerel veriler ve hızlı işlemler"),
     ("Katalog", "Katalog", "Ürün ve hizmet kartları"),
     ("Sipariş", "Sipariş", "Sipariş oluşturma ve takip"),
+    ("Hesaplama", "Hesaplama", "Sac ve çelik parçalar için ağırlık ve fiyat hesabı"),
     ("Cari", "Cari", "Müşteri hesapları ve hareketleri"),
     ("Çıktı", "Çıktı", "Sipariş ve teklif PDF çıktıları"),
     ("Ayarlar", "Ayarlar", "Uygulama tercihleri ve yerel dosya yönetimi"),
@@ -217,6 +219,16 @@ class MainWindow(QMainWindow):
             self.order_table = DataTable(["Sipariş No", "Müşteri", "Tarih", "Durum", "Toplam"])
             layout.addWidget(self.order_table)
             self.refresh_orders()
+        elif page_key == "Hesaplama":
+            card = Card("Sac / Çelik Ağırlık Hesaplayıcı")
+            card.layout.addWidget(QLabel(
+                "En, boy, kalınlık ve adet bilgileriyle toplam ağırlığı; kilo fiyatıyla da tutarı hesaplayın."
+            ))
+            calculator_button = PrimaryButton("Hesaplama Motorunu Aç")
+            calculator_button.clicked.connect(self.open_weight_calculator)
+            card.layout.addWidget(calculator_button)
+            layout.addWidget(card)
+            layout.addStretch()
         elif page_key == "Cari":
             new_customer = PrimaryButton("+ Yeni Müşteri")
             new_customer.clicked.connect(self.open_customer_dialog)
@@ -307,6 +319,9 @@ class MainWindow(QMainWindow):
     def open_order_dialog(self) -> None:
         if OrderDialog(self.connection, self).exec():
             self.refresh_orders()
+
+    def open_weight_calculator(self) -> None:
+        WeightCalculatorDialog(self.connection, self, allow_add_to_cart=False).exec()
 
     def selected_order_id(self) -> int | None:
         items = self.order_table.selectedItems()

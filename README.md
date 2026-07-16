@@ -31,6 +31,6 @@ Uygulama ilk açılışta `db/ozpress.db` dosyasını ve tablolarını oluşturu
 
 ## Genel akış
 
-Ana Menü → Katalog → Sipariş → Cari → Çıktı
+Ana Menü → Katalog → Sipariş → Hesaplama → Cari → Çıktı
 
 Detaylı taslak: `docs/wireframe.svg`.

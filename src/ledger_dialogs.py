@@ -27,6 +27,7 @@ class CollectionDialog(QDialog):
         self.amount = QDoubleSpinBox()
         self.amount.setRange(0.01, 10_000_000)
         self.amount.setDecimals(2)
+        self.amount.setSingleStep(1.0)
         self.amount.setPrefix("₺ ")
         self.payment_date = QDateEdit(QDate.currentDate())
         self.payment_date.setCalendarPopup(True)
