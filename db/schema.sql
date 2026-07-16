@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS siparisler (
     siparis_no TEXT NOT NULL UNIQUE,
     musteri_id INTEGER NOT NULL,
     siparis_tarihi TEXT NOT NULL DEFAULT CURRENT_DATE,
+    proje_tipi TEXT NOT NULL DEFAULT 'Diğer',
     durum TEXT NOT NULL DEFAULT 'Taslak'
         CHECK (durum IN ('Taslak', 'Onaylandı', 'Üretimde', 'Tamamlandı', 'İptal')),
     ara_toplam REAL NOT NULL DEFAULT 0 CHECK (ara_toplam >= 0),
