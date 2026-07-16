@@ -1,8 +1,14 @@
 """Sayfalarda tekrar kullanılan buton, kart, tablo ve form bileşenleri."""
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
+
+from images import resolve_image_path
 
 
 class PrimaryButton(QPushButton):
@@ -44,6 +50,21 @@ class DataTable(QTableWidget):
         self.insertRow(row)
         for column, value in enumerate(values):
             self.setItem(row, column, QTableWidgetItem(value))
+
+
+class ThumbnailLabel(QLabel):
+    """Ürün listelerinde kullanılan küçük görsel önizlemesi."""
+    def __init__(self, image_path: str | None, size: int = 52) -> None:
+        super().__init__()
+        self.setFixedSize(size, size)
+        self.setAlignment(Qt.AlignCenter)
+        self.setStyleSheet("background: #EEF3F6; border: 1px solid #DDE4EA; border-radius: 5px; color: #72808B;")
+        resolved_path = resolve_image_path(image_path)
+        pixmap = QPixmap(str(resolved_path)) if resolved_path else QPixmap()
+        if pixmap.isNull():
+            self.setText("Görsel\nyok")
+            return
+        self.setPixmap(pixmap.scaled(size - 4, size - 4, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
 
 class FormCard(Card):

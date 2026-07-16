@@ -15,7 +15,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     app.setStyleSheet(APPLICATION_STYLESHEET)
     app.setWindowIcon(QIcon(str(Path(__file__).resolve().parent.parent / "Resimler" / "ozpress-logo.svg")))
-    window = MainWindow()
+    window = MainWindow(database)
     window.show()
     exit_code = app.exec()
     database.close()
