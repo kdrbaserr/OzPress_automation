@@ -4,13 +4,13 @@ import sqlite3
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget,
+    QComboBox, QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
+    QMainWindow, QMessageBox, QPushButton, QStackedWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from components import Card, DataTable, FormCard, PrimaryButton, SecondaryButton, ThumbnailLabel, page_actions
 from images import resolve_image_path
-from products import create_product, list_products
+from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
 
 
 PAGES = [
@@ -23,18 +23,25 @@ PAGES = [
 
 
 class ProductDialog(QDialog):
-    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None) -> None:
+    CATEGORIES = ["", "Panel", "Profil", "Trapez Sac", "Aksesuar", "Diğer"]
+
+    def __init__(self, connection: sqlite3.Connection, product_id: int | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.connection = connection
+        self.product_id = product_id
         self.image_source: str | None = None
-        self.setWindowTitle("Yeni Ürün")
+        self.setWindowTitle("Ürün Düzenle" if product_id else "Yeni Ürün")
         self.setMinimumWidth(450)
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.code_input, self.name_input = QLineEdit(), QLineEdit()
+        self.category_input = QComboBox()
+        self.category_input.setEditable(True)
+        self.category_input.addItems(self.CATEGORIES)
         self.unit_input, self.price_input = QLineEdit("Adet"), QLineEdit("0")
         form.addRow("Ürün kodu", self.code_input)
         form.addRow("Ürün adı", self.name_input)
+        form.addRow("Kategori", self.category_input)
         form.addRow("Birim", self.unit_input)
         form.addRow("Birim fiyat", self.price_input)
         layout.addLayout(form)
@@ -55,6 +62,25 @@ class ProductDialog(QDialog):
         save_button = PrimaryButton("Kaydet")
         save_button.clicked.connect(self.save_product)
         layout.addWidget(page_actions(cancel_button, save_button))
+        if self.product_id:
+            self.load_product()
+
+    def load_product(self) -> None:
+        product = get_product(self.connection, self.product_id)
+        if not product:
+            self.reject()
+            return
+        self.code_input.setText(product["kod"])
+        self.name_input.setText(product["ad"])
+        self.category_input.setCurrentText(product["kategori"] or "")
+        self.unit_input.setText(product["birim"])
+        self.price_input.setText(str(product["birim_fiyat"]))
+        self.image_name.setText(product["image_path"] or "Görsel seçilmedi")
+        existing_image = resolve_image_path(product["image_path"])
+        pixmap = QPixmap(str(existing_image)) if existing_image else QPixmap()
+        if not pixmap.isNull():
+            self.image_preview.setText("")
+            self.image_preview.setPixmap(pixmap.scaled(84, 84, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def choose_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -74,11 +100,14 @@ class ProductDialog(QDialog):
             QMessageBox.warning(self, "Eksik bilgi", "Ürün kodu ve ürün adı zorunludur.")
             return
         try:
-            product_id = create_product(
-                self.connection,
-                kod=self.code_input.text(), ad=self.name_input.text(), birim=self.unit_input.text(),
-                birim_fiyat=float(self.price_input.text().replace(",", ".")), source_image=self.image_source,
-            )
+            values = dict(kod=self.code_input.text(), ad=self.name_input.text(), kategori=self.category_input.currentText(),
+                          birim=self.unit_input.text(), birim_fiyat=float(self.price_input.text().replace(",", ".")),
+                          source_image=self.image_source)
+            if self.product_id:
+                update_product(self.connection, product_id=self.product_id, **values)
+                product_id = self.product_id
+            else:
+                product_id = create_product(self.connection, **values)
         except (ValueError, sqlite3.Error, OSError) as error:
             QMessageBox.warning(self, "Ürün kaydedilemedi", str(error))
             return
@@ -146,10 +175,30 @@ class MainWindow(QMainWindow):
         if page_key == "Katalog":
             new_product = PrimaryButton("+ Yeni Ürün")
             new_product.clicked.connect(self.open_product_dialog)
-            layout.addWidget(page_actions(SecondaryButton("Filtrele"), new_product))
-            self.catalog_table = DataTable(["Görsel", "Kod", "Ürün adı", "Birim", "Fiyat"])
+            self.edit_product_button = SecondaryButton("Düzenle")
+            self.edit_product_button.clicked.connect(self.edit_selected_product)
+            self.delete_product_button = SecondaryButton("Sil")
+            self.delete_product_button.clicked.connect(self.delete_selected_product)
+            layout.addWidget(page_actions(self.delete_product_button, self.edit_product_button, new_product))
+            filters = QHBoxLayout()
+            self.catalog_search = QLineEdit()
+            self.catalog_search.setPlaceholderText("Kod veya ürün adı ara...")
+            self.catalog_category_filter = QComboBox()
+            self.catalog_image_filter = QComboBox()
+            self.catalog_image_filter.addItems(["Tümü", "Görselli", "Görselsiz"])
+            filters.addWidget(self.catalog_search, 2)
+            filters.addWidget(QLabel("Kategori"))
+            filters.addWidget(self.catalog_category_filter)
+            filters.addWidget(QLabel("Görünüm"))
+            filters.addWidget(self.catalog_image_filter)
+            layout.addLayout(filters)
+            self.catalog_table = DataTable(["Görsel", "Kod", "Ürün adı", "Kategori", "Birim", "Fiyat"])
             self.catalog_table.setColumnWidth(0, 72)
             layout.addWidget(self.catalog_table)
+            self.catalog_search.textChanged.connect(self.refresh_catalog)
+            self.catalog_category_filter.currentTextChanged.connect(self.refresh_catalog)
+            self.catalog_image_filter.currentTextChanged.connect(self.refresh_catalog)
+            self.catalog_table.itemSelectionChanged.connect(self.update_catalog_actions)
             self.refresh_catalog()
         elif page_key == "Sipariş":
             layout.addWidget(page_actions(SecondaryButton("Taslaklar"), PrimaryButton("+ Yeni Sipariş")))
@@ -177,21 +226,63 @@ class MainWindow(QMainWindow):
         return page
 
     def open_product_dialog(self) -> None:
-        dialog = ProductDialog(self.connection, self)
+        dialog = ProductDialog(self.connection, parent=self)
         if dialog.exec():
+            self.refresh_catalog()
+
+    def selected_product_id(self) -> int | None:
+        selected_items = self.catalog_table.selectedItems()
+        if not selected_items:
+            return None
+        return self.catalog_table.item(selected_items[0].row(), 1).data(Qt.UserRole)
+
+    def update_catalog_actions(self) -> None:
+        has_selection = self.selected_product_id() is not None
+        self.edit_product_button.setEnabled(has_selection)
+        self.delete_product_button.setEnabled(has_selection)
+
+    def edit_selected_product(self) -> None:
+        product_id = self.selected_product_id()
+        if product_id is None:
+            return
+        dialog = ProductDialog(self.connection, product_id, self)
+        if dialog.exec():
+            self.refresh_catalog()
+
+    def delete_selected_product(self) -> None:
+        product_id = self.selected_product_id()
+        if product_id is None:
+            return
+        answer = QMessageBox.question(self, "Ürünü sil", "Ürün katalogdan kaldırılacak. Devam edilsin mi?")
+        if answer == QMessageBox.StandardButton.Yes:
+            soft_delete_product(self.connection, product_id)
             self.refresh_catalog()
 
     def refresh_catalog(self) -> None:
         self.catalog_table.setRowCount(0)
-        for product in list_products(self.connection):
+        self.catalog_category_filter.blockSignals(True)
+        current_category = self.catalog_category_filter.currentText()
+        self.catalog_category_filter.clear()
+        self.catalog_category_filter.addItem("Tüm kategoriler", "")
+        self.catalog_category_filter.addItems(list_categories(self.connection))
+        self.catalog_category_filter.setCurrentText(current_category if current_category else "Tüm kategoriler")
+        self.catalog_category_filter.blockSignals(False)
+        category = self.catalog_category_filter.currentText()
+        if category == "Tüm kategoriler":
+            category = ""
+        for product in list_products(self.connection, search=self.catalog_search.text(), kategori=category,
+                                     image_filter=self.catalog_image_filter.currentText()):
             row = self.catalog_table.rowCount()
             self.catalog_table.insertRow(row)
             self.catalog_table.setCellWidget(row, 0, ThumbnailLabel(product["image_path"]))
-            values = [product["kod"], product["ad"], product["birim"], f"{product['birim_fiyat']:.2f} ₺"]
+            values = [product["kod"], product["ad"], product["kategori"] or "-", product["birim"], f"{product['birim_fiyat']:.2f} ₺"]
             for column, value in enumerate(values, 1):
-                from PySide6.QtWidgets import QTableWidgetItem
-                self.catalog_table.setItem(row, column, QTableWidgetItem(value))
+                item = QTableWidgetItem(value)
+                if column == 1:
+                    item.setData(Qt.UserRole, product["id"])
+                self.catalog_table.setItem(row, column, item)
             self.catalog_table.setRowHeight(row, 60)
+        self.update_catalog_actions()
 
     def show_page(self, index: int) -> None:
         self.pages.setCurrentIndex(index)
