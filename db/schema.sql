@@ -1,0 +1,39 @@
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS catalog (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    unit TEXT NOT NULL DEFAULT 'Adet',
+    price REAL NOT NULL DEFAULT 0,
+    image_path TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS customers (
+    id INTEGER PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
+    address TEXT,
+    balance REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY,
+    number TEXT NOT NULL UNIQUE,
+    customer_id INTEGER REFERENCES customers(id),
+    status TEXT NOT NULL DEFAULT 'Taslak',
+    total REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS order_items (
+    id INTEGER PRIMARY KEY,
+    order_id INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    catalog_id INTEGER NOT NULL REFERENCES catalog(id),
+    quantity REAL NOT NULL DEFAULT 1,
+    unit_price REAL NOT NULL DEFAULT 0
+);
