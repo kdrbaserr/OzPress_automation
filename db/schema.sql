@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS musteriler (
     vergi_dairesi TEXT,
     vergi_no TEXT,
     adres TEXT,
+    notlar TEXT,
     aktif INTEGER NOT NULL DEFAULT 1 CHECK (aktif IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP

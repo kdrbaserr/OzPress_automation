@@ -9,6 +9,8 @@ from PySide6.QtWidgets import (
 )
 
 from components import Card, DataTable, FormCard, PrimaryButton, SecondaryButton, ThumbnailLabel, page_actions
+from customer_dialog import CustomerDetailDialog, CustomerDialog
+from customers import customer_summary, list_customers
 from images import resolve_image_path
 from order_dialog import OrderDialog
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
@@ -207,10 +209,32 @@ class MainWindow(QMainWindow):
             layout.addWidget(page_actions(SecondaryButton("Taslaklar"), new_order))
             layout.addWidget(DataTable(["Sipariş No", "Müşteri", "Tarih", "Durum", "Toplam"]))
         elif page_key == "Cari":
-            content = QHBoxLayout()
-            content.addWidget(FormCard("Yeni Müşteri", ["Kod", "Ünvan", "Telefon"]))
-            content.addWidget(DataTable(["Cari kod", "Ünvan", "Bakiye"]), 1)
-            layout.addLayout(content)
+            new_customer = PrimaryButton("+ Yeni Müşteri")
+            new_customer.clicked.connect(self.open_customer_dialog)
+            detail = SecondaryButton("Detay")
+            detail.clicked.connect(self.open_customer_detail)
+            layout.addWidget(page_actions(detail, new_customer))
+            cards = QHBoxLayout()
+            self.customer_count_card = self._summary_card("Müşteri", "0")
+            self.customer_debt_card = self._summary_card("Borçlu", "0")
+            self.customer_balance_card = self._summary_card("Net Bakiye", "0,00 ₺")
+            for card in (self.customer_count_card, self.customer_debt_card, self.customer_balance_card):
+                cards.addWidget(card)
+            layout.addLayout(cards)
+            filters = QHBoxLayout()
+            self.customer_search = QLineEdit()
+            self.customer_search.setPlaceholderText("Müşteri, kod veya telefon ara...")
+            self.customer_balance_filter = QComboBox()
+            self.customer_balance_filter.addItems(["Tümü", "Borçlu", "Alacaklı", "Bakiyesi Sıfır"])
+            filters.addWidget(self.customer_search, 1)
+            filters.addWidget(self.customer_balance_filter)
+            layout.addLayout(filters)
+            self.customer_table = DataTable(["Kod", "Müşteri", "Telefon", "Güncel Bakiye"])
+            self.customer_table.itemDoubleClicked.connect(lambda _: self.open_customer_detail())
+            self.customer_search.textChanged.connect(self.refresh_customers)
+            self.customer_balance_filter.currentTextChanged.connect(self.refresh_customers)
+            layout.addWidget(self.customer_table)
+            self.refresh_customers()
         elif page_key == "Ayarlar":
             card = Card("Yerel çalışma modu")
             card.layout.addWidget(QLabel("Bu uygulama internet bağlantısı kullanmaz. Tüm veriler cihazdaki SQLite dosyasında saklanır."))
@@ -254,6 +278,47 @@ class MainWindow(QMainWindow):
 
     def open_order_dialog(self) -> None:
         OrderDialog(self.connection, self).exec()
+
+    @staticmethod
+    def _summary_card(title: str, value: str) -> Card:
+        card = Card(title)
+        label = QLabel(value)
+        label.setObjectName("summaryValue")
+        label.setStyleSheet("font-size: 25px; font-weight: 700; color: #17A2A4;")
+        card.layout.addWidget(label)
+        card.value_label = label
+        return card
+
+    def open_customer_dialog(self) -> None:
+        if CustomerDialog(self.connection, self).exec():
+            self.refresh_customers()
+
+    def selected_customer_id(self) -> int | None:
+        items = self.customer_table.selectedItems()
+        return self.customer_table.item(items[0].row(), 0).data(Qt.UserRole) if items else None
+
+    def open_customer_detail(self) -> None:
+        customer_id = self.selected_customer_id()
+        if customer_id is not None:
+            CustomerDetailDialog(self.connection, customer_id, self).exec()
+
+    def refresh_customers(self) -> None:
+        customers = list_customers(self.connection, search=self.customer_search.text(),
+                                   balance_filter=self.customer_balance_filter.currentText())
+        self.customer_table.setRowCount(0)
+        for customer in customers:
+            row = self.customer_table.rowCount()
+            self.customer_table.insertRow(row)
+            values = [customer["kod"], customer["unvan"], customer["telefon"] or "-", f"{float(customer['bakiye']):.2f} ₺"]
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                if column == 0:
+                    item.setData(Qt.UserRole, customer["id"])
+                self.customer_table.setItem(row, column, item)
+        summary = customer_summary(self.connection)
+        self.customer_count_card.value_label.setText(str(summary["count"]))
+        self.customer_debt_card.value_label.setText(str(summary["debtors"]))
+        self.customer_balance_card.value_label.setText(f"{float(summary['balance']):.2f} ₺")
 
     def delete_selected_product(self) -> None:
         product_id = self.selected_product_id()

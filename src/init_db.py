@@ -25,6 +25,9 @@ def _apply_schema_upgrades(connection: sqlite3.Connection) -> None:
     columns = {row[1] for row in connection.execute("PRAGMA table_info(siparisler)")}
     if "proje_tipi" not in columns:
         connection.execute("ALTER TABLE siparisler ADD COLUMN proje_tipi TEXT NOT NULL DEFAULT 'Diğer'")
+    customer_columns = {row[1] for row in connection.execute("PRAGMA table_info(musteriler)")}
+    if "notlar" not in customer_columns:
+        connection.execute("ALTER TABLE musteriler ADD COLUMN notlar TEXT")
 
 
 if __name__ == "__main__":
