@@ -59,17 +59,19 @@ def _fill_invoice_template(order, lines, extras, company, kdv, tax, total, desti
     buffer=BytesIO(); c=canvas.Canvas(buffer,pagesize=A4); c.setFont(FONT,8)
     def put(x,y,text):
         if text: c.drawString(x,y,str(text))
-    put(115,744,f"FAT-{order['siparis_no']}"); put(400,744,order['siparis_tarihi'])
+    # Koordinatlar, OZSAHIN_METAL_Fatura_Sablonu.pdf üzerindeki çizgilerle hizalıdır.
+    put(500,735,f"FAT-{order['siparis_no']}"); put(500,722,order['siparis_tarihi'])
     # Satıcı sol, alıcı sağ blok.
     seller=[company['firma_adi'],company['adres'],company['vergi_dairesi'],company['vergi_no'],f"{company['telefon']} {company['eposta']}".strip()]
     buyer=[order['unvan'],order['adres'],order['vergi_dairesi'],order['vergi_no'],f"{order['telefon'] or ''} {order['eposta'] or ''}".strip()]
-    for i,(left,right) in enumerate(zip(seller,buyer)): put(70,680-i*18,left); put(330,680-i*18,right)
-    put(65,568,order['siparis_no']); put(180,568,''); put(300,568,''); put(420,568,'TL')
-    row_y=525
+    for i,(left,right) in enumerate(zip(seller,buyer)):
+        put(95,613-i*10,left); put(365,613-i*10,right)
+    put(92,525,order['siparis_no']); put(490,525,'TL')
+    row_y=470
     all_lines=[(x['ad'],x['miktar'],x['birim_fiyat'],x['satir_toplami']) for x in lines]+[(x['aciklama'],1,x['satir_toplami'],x['satir_toplami']) for x in extras]
     for index,line in enumerate(all_lines[:7],1):
-        y=row_y-(index-1)*23; put(42,y,index); put(68,y,line[0]); put(305,y,line[1]); put(360,y,'Adet'); put(410,y,f"{float(line[2]):.2f}"); put(480,y,f"%{kdv:g}"); put(535,y,f"{float(line[3]):.2f}")
-    put(370,182,f"{float(order['genel_toplam']):.2f}"); put(370,150,f"{tax:.2f}"); put(370,116,f"{total:.2f}"); put(65,205, f"IBAN: {company['iban']}" if company['iban'] else '')
+        y=row_y-(index-1)*17; put(72,y,index); put(112,y,line[0]); put(220,y,line[1]); put(310,y,'Adet'); put(400,y,f"{float(line[2]):.2f}"); put(465,y,f"%{kdv:g}"); put(530,y,f"{float(line[3]):.2f}")
+    put(530,287,f"{float(order['genel_toplam']):.2f}"); put(530,266,f"{tax:.2f}"); put(530,224,f"{total:.2f}"); put(140,244, company['iban'] or '')
     c.save(); overlay=PdfReader(buffer).pages[0]; base=PdfReader(str(TEMPLATE)); base.pages[0].merge_page(overlay); writer=PdfWriter(); writer.add_page(base.pages[0])
     with open(destination,'wb') as output: writer.write(output)
     return destination

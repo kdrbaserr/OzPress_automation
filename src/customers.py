@@ -16,6 +16,16 @@ def create_customer(connection: sqlite3.Connection, *, unvan: str, telefon: str 
     return cursor.lastrowid
 
 
+def update_customer(connection: sqlite3.Connection, customer_id: int, *, unvan: str, telefon: str = "", adres: str = "", notlar: str = "", eposta: str = "", vergi_dairesi: str = "", vergi_no: str = "") -> None:
+    connection.execute("""UPDATE musteriler SET unvan=?, telefon=?, adres=?, notlar=?, eposta=?, vergi_dairesi=?, vergi_no=?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND aktif=1""", (unvan.strip(), telefon.strip() or None, adres.strip() or None, notlar.strip() or None, eposta.strip() or None, vergi_dairesi.strip() or None, vergi_no.strip() or None, customer_id))
+    connection.commit()
+
+
+def soft_delete_customer(connection: sqlite3.Connection, customer_id: int) -> None:
+    connection.execute("UPDATE musteriler SET aktif=0, updated_at=CURRENT_TIMESTAMP WHERE id=?", (customer_id,))
+    connection.commit()
+
+
 def list_customers(connection: sqlite3.Connection, *, search: str = "", balance_filter: str = "Tümü") -> list[sqlite3.Row]:
     filters = ["m.aktif = 1"]
     values: list[str] = []

@@ -4,14 +4,15 @@ import sqlite3
 from PySide6.QtWidgets import QDialog, QFormLayout, QLabel, QLineEdit, QPlainTextEdit, QTableWidgetItem, QVBoxLayout, QWidget
 
 from components import Card, DataTable, PrimaryButton, SecondaryButton, page_actions
-from customers import create_customer, customer_detail
+from customers import create_customer, customer_detail, update_customer
 
 
 class CustomerDialog(QDialog):
-    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None) -> None:
+    def __init__(self, connection: sqlite3.Connection, customer_id: int | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.connection = connection
-        self.setWindowTitle("Yeni Müşteri")
+        self.customer_id = customer_id
+        self.setWindowTitle("Müşteri Düzenle" if customer_id else "Yeni Müşteri")
         self.setMinimumWidth(440)
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -33,13 +34,23 @@ class CustomerDialog(QDialog):
         save = PrimaryButton("Müşteriyi Kaydet")
         save.clicked.connect(self.save)
         layout.addWidget(page_actions(cancel, save))
+        if customer_id:
+            self.load_customer()
+
+    def load_customer(self) -> None:
+        customer, _, _ = customer_detail(self.connection, self.customer_id)
+        if not customer: self.reject(); return
+        self.name.setText(customer["unvan"]); self.phone.setText(customer["telefon"] or ""); self.email.setText(customer["eposta"] or "")
+        self.tax_office.setText(customer["vergi_dairesi"] or ""); self.tax_no.setText(customer["vergi_no"] or "")
+        self.address.setPlainText(customer["adres"] or ""); self.note.setPlainText(customer["notlar"] or "")
 
     def save(self) -> None:
         if not self.name.text().strip():
             self.name.setFocus()
             return
-        customer_id = create_customer(self.connection, unvan=self.name.text(), telefon=self.phone.text(),
-                                      adres=self.address.toPlainText(), notlar=self.note.toPlainText(), eposta=self.email.text(), vergi_dairesi=self.tax_office.text(), vergi_no=self.tax_no.text())
+        values=dict(unvan=self.name.text(), telefon=self.phone.text(), adres=self.address.toPlainText(), notlar=self.note.toPlainText(), eposta=self.email.text(), vergi_dairesi=self.tax_office.text(), vergi_no=self.tax_no.text())
+        if self.customer_id: update_customer(self.connection, self.customer_id, **values); customer_id=self.customer_id
+        else: customer_id = create_customer(self.connection, **values)
         self.done(customer_id)
 
 
