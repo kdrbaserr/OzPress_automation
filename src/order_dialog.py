@@ -107,7 +107,10 @@ class OrderDialog(QDialog):
         self.render_cart()
 
     def open_weight_calculator(self) -> None:
-        WeightCalculatorDialog(self).exec()
+        calculator = WeightCalculatorDialog(self.connection, self)
+        if calculator.exec() and calculator.cart_item:
+            self.cart.append(calculator.cart_item)
+            self.render_cart()
 
     def add_extra_item(self) -> None:
         description = self.extra_description.text().strip()
