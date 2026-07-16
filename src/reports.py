@@ -25,7 +25,7 @@ def create_order_pdf(connection: sqlite3.Connection, order_id: int, *, document_
     if not order: raise ValueError("Sipariş bulunamadı.")
     lines = connection.execute("SELECT u.ad, k.miktar, k.birim_fiyat, k.satir_toplami FROM siparis_kalemleri k JOIN urunler u ON u.id=k.urun_id WHERE k.siparis_id=?", (order_id,)).fetchall()
     extras = connection.execute("SELECT aciklama, satir_toplami FROM ekstra_kalemler WHERE siparis_id=?", (order_id,)).fetchall()
-    company = get_settings(connection); _, _, _ = customer_detail(connection, order["musteri_id"])
+    company = get_settings(connection)
     _, _, movements = customer_detail(connection, order["musteri_id"])
     balance = sum((m["tutar"] if m["hareket_tipi"] == "Borç" else -m["tutar"]) for m in movements)
     kdv = float(company["kdv_orani"] or 0); subtotal=float(order["genel_toplam"]); tax=subtotal*kdv/100; total=subtotal+tax
