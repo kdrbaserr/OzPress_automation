@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 from components import Card, DataTable, FormCard, PrimaryButton, SecondaryButton, ThumbnailLabel, page_actions
 from images import resolve_image_path
+from order_dialog import OrderDialog
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
 
 
@@ -201,7 +202,9 @@ class MainWindow(QMainWindow):
             self.catalog_table.itemSelectionChanged.connect(self.update_catalog_actions)
             self.refresh_catalog()
         elif page_key == "Sipariş":
-            layout.addWidget(page_actions(SecondaryButton("Taslaklar"), PrimaryButton("+ Yeni Sipariş")))
+            new_order = PrimaryButton("+ Yeni Sipariş / Proje")
+            new_order.clicked.connect(self.open_order_dialog)
+            layout.addWidget(page_actions(SecondaryButton("Taslaklar"), new_order))
             layout.addWidget(DataTable(["Sipariş No", "Müşteri", "Tarih", "Durum", "Toplam"]))
         elif page_key == "Cari":
             content = QHBoxLayout()
@@ -248,6 +251,9 @@ class MainWindow(QMainWindow):
         dialog = ProductDialog(self.connection, product_id, self)
         if dialog.exec():
             self.refresh_catalog()
+
+    def open_order_dialog(self) -> None:
+        OrderDialog(self.connection, self).exec()
 
     def delete_selected_product(self) -> None:
         product_id = self.selected_product_id()

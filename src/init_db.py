@@ -15,8 +15,16 @@ def create_database() -> sqlite3.Connection:
     connection = sqlite3.connect(DATABASE_PATH)
     connection.execute("PRAGMA foreign_keys = ON")
     connection.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+    _apply_schema_upgrades(connection)
     connection.commit()
     return connection
+
+
+def _apply_schema_upgrades(connection: sqlite3.Connection) -> None:
+    """Mevcut kullanıcı verisini silmeden küçük şema güncellemelerini uygular."""
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(siparisler)")}
+    if "proje_tipi" not in columns:
+        connection.execute("ALTER TABLE siparisler ADD COLUMN proje_tipi TEXT NOT NULL DEFAULT 'Diğer'")
 
 
 if __name__ == "__main__":
