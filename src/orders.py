@@ -19,20 +19,26 @@ def create_order(
     product_items = [item for item in items if item["tip"] == "urun"]
     extra_items = [item for item in items if item["tip"] == "ekstra"]
     product_total = sum(float(item["miktar"]) * float(item["birim_fiyat"]) for item in product_items)
+    vat_total = sum(
+        float(item["miktar"]) * float(item["birim_fiyat"]) * float(item.get("kdv_orani", 0)) / 100
+        for item in product_items
+    )
     extra_total = sum(float(item["tutar"]) for item in extra_items)
-    total = product_total + extra_total
+    total = product_total + vat_total + extra_total
     order_number = f"SP-{datetime.now():%Y%m%d}-{uuid4().hex[:6].upper()}"
     with connection:
         cursor = connection.execute(
-            """INSERT INTO siparisler (siparis_no, musteri_id, proje_id, proje_tipi, ara_toplam, ekstra_toplam, genel_toplam)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (order_number, musteri_id, proje_id, proje_tipi, product_total, extra_total, total),
+            """INSERT INTO siparisler
+               (siparis_no, musteri_id, proje_id, proje_tipi, ara_toplam, ekstra_toplam, kdv_toplam, genel_toplam)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (order_number, musteri_id, proje_id, proje_tipi, product_total, extra_total, vat_total, total),
         )
         order_id = cursor.lastrowid
         connection.executemany(
-            """INSERT INTO siparis_kalemleri (siparis_id, urun_id, miktar, birim_fiyat, satir_toplami)
-               VALUES (?, ?, ?, ?, ?)""",
+            """INSERT INTO siparis_kalemleri (siparis_id, urun_id, miktar, birim_fiyat, kdv_orani, satir_toplami)
+               VALUES (?, ?, ?, ?, ?, ?)""",
             [(order_id, int(item["urun_id"]), float(item["miktar"]), float(item["birim_fiyat"]),
+              float(item.get("kdv_orani", 0)),
               float(item["miktar"]) * float(item["birim_fiyat"])) for item in product_items],
         )
         connection.executemany(
