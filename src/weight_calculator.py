@@ -1,6 +1,6 @@
 """Sac/çelik parça ağırlığını milimetre cinsinden hesaplayan arayüz."""
 import sqlite3
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QLocale, Qt
 from PySide6.QtWidgets import QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QSpinBox, QVBoxLayout, QWidget
 
 from components import Card, PrimaryButton, SecondaryButton, page_actions
@@ -8,6 +8,24 @@ from products import list_products
 
 
 STEEL_DENSITY = 7.85
+
+
+class FlexibleDoubleSpinBox(QDoubleSpinBox):
+    """Ondalık ayıracı olarak hem virgül hem nokta kabul eder."""
+
+    def valueFromText(self, text: str) -> float:
+        cleaned = text.strip()
+        for token in (self.prefix(), self.suffix()):
+            cleaned = cleaned.replace(token.strip(), "")
+        cleaned = cleaned.replace(" ", "").replace(",", ".")
+        try:
+            return float(cleaned)
+        except ValueError:
+            return 0.0
+
+    def validate(self, text: str, position: int):
+        normalized = text.replace(".", QLocale().decimalPoint()).replace(",", QLocale().decimalPoint())
+        return super().validate(normalized, position)
 
 
 def calculate_weight_kg(width_mm: float, length_mm: float, thickness_mm: float, quantity: int) -> float:
@@ -39,15 +57,15 @@ class WeightCalculatorDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Çelik yoğunluğu: 7,85 g/cm³"))
         form = QFormLayout()
-        self.width = self._dimension_input()
-        self.length = self._dimension_input()
-        self.thickness = self._dimension_input()
+        self.width = self._dimension_input("cm")
+        self.length = self._dimension_input("cm")
+        self.thickness = self._dimension_input("mm")
         self.quantity = QSpinBox()
         self.quantity.setRange(0, 1_000_000)
         self.quantity.setSingleStep(1)
         self.quantity.setSpecialValueText("Geçerli adet girin")
-        form.addRow("En (mm)", self.width)
-        form.addRow("Boy (mm)", self.length)
+        form.addRow("En (cm)", self.width)
+        form.addRow("Boy (cm)", self.length)
         form.addRow("Kalınlık (mm)", self.thickness)
         form.addRow("Adet", self.quantity)
         self.description = QLineEdit()
@@ -61,7 +79,7 @@ class WeightCalculatorDialog(QDialog):
                     f"Katalog: {product['kod']} — {product['ad']} ({product['birim_fiyat']:.2f} ₺/KG)",
                     float(product["birim_fiyat"]),
                 )
-        self.kilo_price = QDoubleSpinBox()
+        self.kilo_price = FlexibleDoubleSpinBox()
         self.kilo_price.setRange(0, 10_000_000)
         self.kilo_price.setDecimals(2)
         self.kilo_price.setSingleStep(1.0)
@@ -100,19 +118,19 @@ class WeightCalculatorDialog(QDialog):
         self.update_result()
 
     @staticmethod
-    def _dimension_input() -> QDoubleSpinBox:
-        input_widget = QDoubleSpinBox()
+    def _dimension_input(unit: str) -> FlexibleDoubleSpinBox:
+        input_widget = FlexibleDoubleSpinBox()
         input_widget.setRange(0, 10_000_000)
         input_widget.setDecimals(2)
         input_widget.setSingleStep(1.0)
-        input_widget.setSuffix(" mm")
+        input_widget.setSuffix(f" {unit}")
         input_widget.setSpecialValueText("Geçerli ölçü girin")
         input_widget.setToolTip("Negatif değer kabul edilmez; sıfırdan büyük bir ölçü girin.")
         return input_widget
 
     def update_result(self) -> None:
         try:
-            weight = calculate_weight_kg(self.width.value(), self.length.value(), self.thickness.value(), self.quantity.value())
+            weight = calculate_weight_kg(self.width.value() * 10, self.length.value() * 10, self.thickness.value(), self.quantity.value())
             total = calculate_weight_price(weight, self.kilo_price.value())
         except ValueError as error:
             self.result.setText("0,000 KG")
@@ -134,7 +152,7 @@ class WeightCalculatorDialog(QDialog):
 
     def add_to_cart(self) -> None:
         try:
-            weight = calculate_weight_kg(self.width.value(), self.length.value(), self.thickness.value(), self.quantity.value())
+            weight = calculate_weight_kg(self.width.value() * 10, self.length.value() * 10, self.thickness.value(), self.quantity.value())
             total = calculate_weight_price(weight, self.kilo_price.value())
         except ValueError as error:
             self.validation.setText(str(error))

@@ -5,19 +5,20 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QHeaderView, QMainWindow, QMessageBox, QPushButton, QScrollArea, QStackedWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from components import Card, DataTable, FormCard, PrimaryButton, SecondaryButton, ThumbnailLabel, page_actions
 from customer_dialog import CustomerDetailDialog, CustomerDialog
-from customers import customer_summary, list_customers, soft_delete_customer
+from customers import customer_summary, format_customer_balance, list_customers, soft_delete_customer
 from images import resolve_image_path
 from order_dialog import OrderDialog
 from ledger_dialogs import CollectionDialog, StatementDialog
-from orders import confirm_order, list_orders
+from orders import confirm_order, delete_order, list_orders
 from output_dialog import OutputDialog
 from settings import get_settings, save_settings
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
+from projects import create_project, list_projects
 from weight_calculator import WeightCalculatorDialog
 
 
@@ -25,6 +26,7 @@ PAGES = [
     ("Ana Menü", "Genel Bakış", "Yerel veriler ve hızlı işlemler"),
     ("Katalog", "Katalog", "Ürün ve hizmet kartları"),
     ("Sipariş", "Sipariş", "Sipariş oluşturma ve takip"),
+    ("Projeler", "Projeler", "Kayıtlı projeleri oluşturma ve takip"),
     ("Hesaplama", "Hesaplama", "Sac ve çelik parçalar için ağırlık ve fiyat hesabı"),
     ("Cari", "Cari", "Müşteri hesapları ve hareketleri"),
     ("Çıktı", "Çıktı", "Sipariş ve teklif PDF çıktıları"),
@@ -124,6 +126,45 @@ class ProductDialog(QDialog):
         self.done(product_id)
 
 
+class ProjectDialog(QDialog):
+    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.connection = connection
+        self.setWindowTitle("Yeni Proje")
+        self.setMinimumWidth(440)
+        layout = QVBoxLayout(self)
+        form = QFormLayout()
+        self.name_input = QLineEdit()
+        self.type_input = QComboBox()
+        self.type_input.setEditable(True)
+        self.type_input.addItems(OrderDialog.PROJECT_TYPES)
+        self.customer_input = QComboBox()
+        self.customer_input.addItem("Müşteri seçilmedi", None)
+        for customer in list_customers(connection):
+            self.customer_input.addItem(f"{customer['kod']} — {customer['unvan']}", customer["id"])
+        self.description_input = QLineEdit()
+        form.addRow("Proje adı", self.name_input)
+        form.addRow("Proje türü", self.type_input)
+        form.addRow("Müşteri", self.customer_input)
+        form.addRow("Açıklama", self.description_input)
+        layout.addLayout(form)
+        cancel, save = SecondaryButton("Vazgeç"), PrimaryButton("Projeyi Kaydet")
+        cancel.clicked.connect(self.reject)
+        save.clicked.connect(self.save_project)
+        layout.addWidget(page_actions(cancel, save))
+
+    def save_project(self) -> None:
+        try:
+            project_id = create_project(
+                self.connection, ad=self.name_input.text(), proje_tipi=self.type_input.currentText(),
+                musteri_id=self.customer_input.currentData(), aciklama=self.description_input.text(),
+            )
+        except (ValueError, sqlite3.Error) as error:
+            QMessageBox.warning(self, "Proje kaydedilemedi", str(error))
+            return
+        self.done(project_id)
+
+
 class MainWindow(QMainWindow):
     def __init__(self, connection: sqlite3.Connection) -> None:
         super().__init__()
@@ -213,12 +254,32 @@ class MainWindow(QMainWindow):
         elif page_key == "Sipariş":
             new_order = PrimaryButton("+ Yeni Sipariş / Proje")
             new_order.clicked.connect(self.open_order_dialog)
-            confirm = SecondaryButton("Siparişi Onayla")
-            confirm.clicked.connect(self.confirm_selected_order)
-            layout.addWidget(page_actions(confirm, new_order))
+            layout.addWidget(page_actions(new_order))
+            self.delete_order_button = SecondaryButton("Siparişi Sil")
+            self.delete_order_button.clicked.connect(self.delete_selected_order)
+            self.invoice_button = PrimaryButton("Fatura PDF Oluştur")
+            self.invoice_button.clicked.connect(lambda: self.open_selected_order_output("Fatura"))
+            self.order_pdf_button = PrimaryButton("Sipariş PDF Oluştur")
+            self.order_pdf_button.clicked.connect(lambda: self.open_selected_order_output("Sipariş"))
+            self.confirm_order_button = SecondaryButton("Siparişi Onayla")
+            self.confirm_order_button.clicked.connect(self.confirm_selected_order)
+            self.order_actions = page_actions(
+                self.delete_order_button, self.confirm_order_button, self.order_pdf_button, self.invoice_button
+            )
+            self.order_actions.setVisible(False)
+            layout.addWidget(self.order_actions)
             self.order_table = DataTable(["Sipariş No", "Müşteri", "Tarih", "Durum", "Toplam"])
+            self.order_table.itemSelectionChanged.connect(self.update_order_actions)
+            self.order_table.itemDoubleClicked.connect(lambda _: self.open_selected_order_output("Sipariş"))
             layout.addWidget(self.order_table)
             self.refresh_orders()
+        elif page_key == "Projeler":
+            new_project = PrimaryButton("+ Yeni Proje")
+            new_project.clicked.connect(self.open_project_dialog)
+            layout.addWidget(page_actions(new_project))
+            self.project_table = DataTable(["Proje adı", "Proje türü", "Müşteri", "Açıklama"])
+            layout.addWidget(self.project_table)
+            self.refresh_projects()
         elif page_key == "Hesaplama":
             card = Card("Sac / Çelik Ağırlık Hesaplayıcı")
             card.layout.addWidget(QLabel(
@@ -254,11 +315,17 @@ class MainWindow(QMainWindow):
             self.customer_search = QLineEdit()
             self.customer_search.setPlaceholderText("Müşteri, kod veya telefon ara...")
             self.customer_balance_filter = QComboBox()
-            self.customer_balance_filter.addItems(["Tümü", "Borçlu", "Alacaklı", "Bakiyesi Sıfır"])
+            self.customer_balance_filter.addItems(["Tüm müşteriler", "Borçlu", "Alacaklı", "Bakiyesi Sıfır"])
             filters.addWidget(self.customer_search, 1)
             filters.addWidget(self.customer_balance_filter)
             layout.addLayout(filters)
             self.customer_table = DataTable(["Kod", "Müşteri", "Telefon", "Güncel Bakiye"])
+            customer_header = self.customer_table.horizontalHeader()
+            customer_header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            customer_header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            customer_header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+            customer_header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+            self.customer_table.setColumnWidth(3, 280)
             self.customer_table.itemDoubleClicked.connect(lambda _: self.open_customer_detail())
             self.customer_search.textChanged.connect(self.refresh_customers)
             self.customer_balance_filter.currentTextChanged.connect(self.refresh_customers)
@@ -275,12 +342,14 @@ class MainWindow(QMainWindow):
             card=Card("Sipariş / teklif çıktısı"); card.layout.addWidget(QLabel("A4, 58 mm ve 80 mm termal PDF şablonları desteklenir.")); button=PrimaryButton("Masaüstüne PDF Kaydet"); button.clicked.connect(self.open_output_dialog); card.layout.addWidget(button); layout.addWidget(card); layout.addStretch()
         else:
             cards = QHBoxLayout()
-            for card_title, value in [("Ürün", "0"), ("Açık Sipariş", "0"), ("Cari", "0")]:
+            self.dashboard_values: dict[str, QLabel] = {}
+            for card_title in ("Ürün", "Açık Sipariş", "Cari"):
                 card = Card(card_title)
-                number = QLabel(value)
+                number = QLabel("0")
                 number.setStyleSheet("font-size: 32px; font-weight: 700; color: #17A2A4;")
                 card.layout.addWidget(number)
                 cards.addWidget(card)
+                self.dashboard_values[card_title] = number
             layout.addLayout(cards)
             layout.addStretch()
         scroll_area = QScrollArea()
@@ -296,6 +365,7 @@ class MainWindow(QMainWindow):
         dialog = ProductDialog(self.connection, parent=self)
         if dialog.exec():
             self.refresh_catalog()
+            self.refresh_dashboard()
 
     def selected_product_id(self) -> int | None:
         selected_items = self.catalog_table.selectedItems()
@@ -319,6 +389,22 @@ class MainWindow(QMainWindow):
     def open_order_dialog(self) -> None:
         if OrderDialog(self.connection, self).exec():
             self.refresh_orders()
+            self.refresh_dashboard()
+
+    def open_project_dialog(self) -> None:
+        if ProjectDialog(self.connection, self).exec():
+            self.refresh_projects()
+
+    def refresh_projects(self) -> None:
+        self.project_table.setRowCount(0)
+        for project in list_projects(self.connection):
+            row = self.project_table.rowCount()
+            self.project_table.insertRow(row)
+            for column, value in enumerate((project["ad"], project["proje_tipi"], project["musteri"] or "-", project["aciklama"] or "-")):
+                item = QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setData(Qt.UserRole, project["id"])
+                self.project_table.setItem(row, column, item)
 
     def open_weight_calculator(self) -> None:
         WeightCalculatorDialog(self.connection, self, allow_add_to_cart=False).exec()
@@ -326,6 +412,35 @@ class MainWindow(QMainWindow):
     def selected_order_id(self) -> int | None:
         items = self.order_table.selectedItems()
         return self.order_table.item(items[0].row(), 0).data(Qt.UserRole) if items else None
+
+    def update_order_actions(self) -> None:
+        self.order_actions.setVisible(self.selected_order_id() is not None)
+
+    def open_selected_order_output(self, document_type: str) -> None:
+        order_id = self.selected_order_id()
+        if order_id is not None:
+            OutputDialog(self.connection, self, order_id=order_id, document_type=document_type).exec()
+
+    def delete_selected_order(self) -> None:
+        order_id = self.selected_order_id()
+        if order_id is None:
+            return
+        answer = QMessageBox.question(
+            self, "Siparişi sil",
+            "Seçili sipariş ve bu siparişin oluşturduğu cari hareket silinecek. Devam edilsin mi?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            delete_order(self.connection, order_id)
+        except (ValueError, sqlite3.Error) as error:
+            QMessageBox.warning(self, "Sipariş silinemedi", str(error))
+            return
+        self.refresh_orders()
+        self.refresh_customers()
+        self.refresh_dashboard()
 
     def refresh_orders(self) -> None:
         self.order_table.setRowCount(0)
@@ -338,6 +453,7 @@ class MainWindow(QMainWindow):
                 if column == 0:
                     item.setData(Qt.UserRole, order["id"])
                 self.order_table.setItem(row, column, item)
+        self.update_order_actions()
 
     def confirm_selected_order(self) -> None:
         order_id = self.selected_order_id()
@@ -350,6 +466,7 @@ class MainWindow(QMainWindow):
             return
         self.refresh_orders()
         self.refresh_customers()
+        self.refresh_dashboard()
 
     @staticmethod
     def _summary_card(title: str, value: str) -> Card:
@@ -364,6 +481,7 @@ class MainWindow(QMainWindow):
     def open_customer_dialog(self) -> None:
         if CustomerDialog(self.connection, parent=self).exec():
             self.refresh_customers()
+            self.refresh_dashboard()
 
     def edit_selected_customer(self) -> None:
         customer_id = self.selected_customer_id()
@@ -377,6 +495,7 @@ class MainWindow(QMainWindow):
         if QMessageBox.question(self, "Müşteriyi sil", "Müşteri listeden kaldırılacak. Devam edilsin mi?") == QMessageBox.StandardButton.Yes:
             soft_delete_customer(self.connection, customer_id)
             self.refresh_customers()
+            self.refresh_dashboard()
 
     def selected_customer_id(self) -> int | None:
         items = self.customer_table.selectedItems()
@@ -415,7 +534,8 @@ class MainWindow(QMainWindow):
         for customer in customers:
             row = self.customer_table.rowCount()
             self.customer_table.insertRow(row)
-            values = [customer["kod"], customer["unvan"], customer["telefon"] or "-", f"{float(customer['bakiye']):.2f} ₺"]
+            values = [customer["kod"], customer["unvan"], customer["telefon"] or "-",
+                      format_customer_balance(float(customer["bakiye"]))]
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if column == 0:
@@ -424,7 +544,7 @@ class MainWindow(QMainWindow):
         summary = customer_summary(self.connection)
         self.customer_count_card.value_label.setText(str(summary["count"]))
         self.customer_debt_card.value_label.setText(str(summary["debtors"]))
-        self.customer_balance_card.value_label.setText(f"{float(summary['balance']):.2f} ₺")
+        self.customer_balance_card.value_label.setText(format_customer_balance(float(summary["balance"])))
 
     def delete_selected_product(self) -> None:
         product_id = self.selected_product_id()
@@ -434,6 +554,24 @@ class MainWindow(QMainWindow):
         if answer == QMessageBox.StandardButton.Yes:
             soft_delete_product(self.connection, product_id)
             self.refresh_catalog()
+            self.refresh_dashboard()
+
+    def refresh_dashboard(self) -> None:
+        """Ana menü kartlarını güncel veritabanı kayıtlarıyla yeniler."""
+        if not hasattr(self, "dashboard_values"):
+            return
+        product_count = self.connection.execute(
+            "SELECT COUNT(*) FROM urunler WHERE aktif = 1"
+        ).fetchone()[0]
+        open_order_count = self.connection.execute(
+            "SELECT COUNT(*) FROM siparisler WHERE durum NOT IN ('Tamamlandı', 'İptal')"
+        ).fetchone()[0]
+        customer_count = self.connection.execute(
+            "SELECT COUNT(*) FROM musteriler WHERE aktif = 1"
+        ).fetchone()[0]
+        self.dashboard_values["Ürün"].setText(str(product_count))
+        self.dashboard_values["Açık Sipariş"].setText(str(open_order_count))
+        self.dashboard_values["Cari"].setText(str(customer_count))
 
     def refresh_catalog(self) -> None:
         self.catalog_table.setRowCount(0)
@@ -462,6 +600,8 @@ class MainWindow(QMainWindow):
         self.update_catalog_actions()
 
     def show_page(self, index: int) -> None:
+        if index == 0:
+            self.refresh_dashboard()
         self.pages.setCurrentIndex(index)
         for button_index, button in enumerate(self._buttons):
             button.setChecked(button_index == index)

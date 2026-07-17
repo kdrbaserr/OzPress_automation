@@ -4,7 +4,7 @@ import sqlite3
 from PySide6.QtWidgets import QDialog, QFormLayout, QLabel, QLineEdit, QPlainTextEdit, QTableWidgetItem, QVBoxLayout, QWidget
 
 from components import Card, DataTable, PrimaryButton, SecondaryButton, page_actions
-from customers import create_customer, customer_detail, update_customer
+from customers import create_customer, customer_detail, format_customer_balance, update_customer
 
 
 class CustomerDialog(QDialog):
@@ -65,7 +65,7 @@ class CustomerDetailDialog(QDialog):
             return
         summary = Card(customer["unvan"])
         summary.layout.addWidget(QLabel(f"Telefon: {customer['telefon'] or '-'}\nAdres: {customer['adres'] or '-'}"))
-        balance = QLabel(f"Güncel bakiye: {float(customer['bakiye']):.2f} ₺")
+        balance = QLabel(f"Güncel bakiye: {format_customer_balance(float(customer['bakiye']))}")
         balance.setStyleSheet("font-size: 20px; font-weight: 700; color: #17A2A4;")
         summary.layout.addWidget(balance)
         if customer["notlar"]:

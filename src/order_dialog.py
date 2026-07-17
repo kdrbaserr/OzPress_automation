@@ -4,12 +4,13 @@ import sqlite3
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMessageBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QHeaderView, QMessageBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from components import PrimaryButton, SecondaryButton, page_actions
 from orders import create_order, list_customers
 from products import list_products, update_catalog_price
+from projects import list_projects
 from weight_calculator import WeightCalculatorDialog
 
 
@@ -21,15 +22,27 @@ class OrderDialog(QDialog):
         self.connection = connection
         self.cart: list[dict[str, float | int | str]] = []
         self.setWindowTitle("Yeni Sipariş / Proje")
-        self.resize(780, 600)
+        self.resize(950, 650)
+        self.setMinimumWidth(900)
         layout = QVBoxLayout(self)
 
         form = QFormLayout()
         self.project_type = QComboBox()
         self.project_type.addItems(self.PROJECT_TYPES)
+        self.project_type.currentTextChanged.connect(self.toggle_custom_project_type)
+        self.custom_project_type = QLineEdit()
+        self.custom_project_type.setPlaceholderText("Proje türünü yazın")
+        self.custom_project_type.setVisible(False)
+        self.project = QComboBox()
+        self.project.addItem("Kayıtlı proje seçmeden devam et", None)
+        for project in list_projects(connection):
+            self.project.addItem(f"{project['ad']} — {project['proje_tipi']}", project["id"])
+        self.project.currentIndexChanged.connect(self.apply_selected_project)
         self.customer = QComboBox()
         self._load_customers()
         form.addRow("Proje tipi", self.project_type)
+        form.addRow("Özel proje türü", self.custom_project_type)
+        form.addRow("Kayıtlı proje", self.project)
         form.addRow("Müşteri", self.customer)
         layout.addLayout(form)
 
@@ -73,6 +86,14 @@ class OrderDialog(QDialog):
         self.cart_table.setHorizontalHeaderLabels(["Kalem", "Miktar", "Birim fiyat / Tutar", "Ara toplam", "İşlem"])
         self.cart_table.verticalHeader().setVisible(False)
         self.cart_table.setMinimumHeight(270)
+        header = self.cart_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in (1, 2, 3, 4):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+        self.cart_table.setColumnWidth(1, 135)
+        self.cart_table.setColumnWidth(2, 175)
+        self.cart_table.setColumnWidth(3, 125)
+        self.cart_table.setColumnWidth(4, 90)
         layout.addWidget(self.cart_table)
         self.total_label = QLabel("Ara toplam: 0,00 ₺")
         self.total_label.setStyleSheet("font-size: 18px; font-weight: 700; color: #132638;")
@@ -83,6 +104,23 @@ class OrderDialog(QDialog):
         save = PrimaryButton("Siparişi Kaydet")
         save.clicked.connect(self.save_order)
         layout.addWidget(page_actions(cancel, save))
+
+    def toggle_custom_project_type(self, project_type: str) -> None:
+        self.custom_project_type.setVisible(project_type == self.PROJECT_TYPES[-1])
+
+    def apply_selected_project(self) -> None:
+        project_id = self.project.currentData()
+        if not project_id:
+            return
+        selected = next((item for item in list_projects(self.connection) if item["id"] == project_id), None)
+        if not selected:
+            return
+        self.project_type.setCurrentText(selected["proje_tipi"] if selected["proje_tipi"] in self.PROJECT_TYPES else self.PROJECT_TYPES[-1])
+        if self.project_type.currentText() == self.PROJECT_TYPES[-1]:
+            self.custom_project_type.setText(selected["proje_tipi"])
+        customer_index = self.customer.findData(selected["musteri_id"])
+        if customer_index >= 0:
+            self.customer.setCurrentIndex(customer_index)
 
     def _load_customers(self) -> None:
         self.customer.clear()
@@ -133,6 +171,7 @@ class OrderDialog(QDialog):
             else:
                 self.render_extra_row(row, item)
             delete = SecondaryButton("Sil")
+            delete.setMinimumWidth(64)
             delete.clicked.connect(lambda checked=False, i=row: self.remove_cart_line(i))
             self.cart_table.setCellWidget(row, 4, delete)
         self.total_label.setText(f"Ara toplam: {self.cart_total():.2f} ₺")
@@ -144,6 +183,7 @@ class OrderDialog(QDialog):
         amount.setDecimals(2)
         amount.setSingleStep(1.0)
         amount.setValue(float(item["miktar"]))
+        amount.setMinimumWidth(125)
         amount.valueChanged.connect(lambda value, i=row: self.update_quantity(i, value))
         self.cart_table.setCellWidget(row, 1, amount)
         price = QDoubleSpinBox()
@@ -152,6 +192,7 @@ class OrderDialog(QDialog):
         price.setSingleStep(1.0)
         price.setPrefix("₺ ")
         price.setValue(float(item["birim_fiyat"]))
+        price.setMinimumWidth(165)
         price.editingFinished.connect(lambda i=row, widget=price: self.update_unit_price(i, widget.value()))
         self.cart_table.setCellWidget(row, 2, price)
         self.cart_table.setItem(row, 3, QTableWidgetItem(f"{self.line_total(item):.2f} ₺"))
@@ -203,9 +244,15 @@ class OrderDialog(QDialog):
         if not customer_id:
             QMessageBox.warning(self, "Müşteri seçin", "Siparişi kaydetmeden önce bir müşteri seçin.")
             return
+        project_type = self.project_type.currentText()
+        if project_type == self.PROJECT_TYPES[-1]:
+            project_type = self.custom_project_type.text().strip()
+            if not project_type:
+                QMessageBox.warning(self, "Proje türü gerekli", "Diğer seçildiğinde proje türünü yazın.")
+                return
         try:
-            order_id = create_order(self.connection, musteri_id=customer_id, proje_tipi=self.project_type.currentText(),
-                                    items=self.cart)
+            order_id = create_order(self.connection, musteri_id=customer_id, proje_tipi=project_type,
+                                    items=self.cart, proje_id=self.project.currentData())
         except (ValueError, sqlite3.Error) as error:
             QMessageBox.warning(self, "Sipariş kaydedilemedi", str(error))
             return
