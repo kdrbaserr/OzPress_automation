@@ -18,7 +18,7 @@ from orders import confirm_order, delete_order, list_orders
 from output_dialog import OutputDialog
 from settings import get_settings, save_settings
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
-from projects import create_project, list_projects
+from projects import create_project, list_projects, soft_delete_project
 from weight_calculator import WeightCalculatorDialog
 
 
@@ -35,7 +35,7 @@ PAGES = [
 
 
 class ProductDialog(QDialog):
-    CATEGORIES = ["", "Panel", "Profil", "Trapez Sac", "Aksesuar", "Diğer"]
+    CATEGORIES = ["", "Panel", "Profil", "Sac", "Trapez Sac", "Aksesuar", "Diğer"]
 
     def __init__(self, connection: sqlite3.Connection, product_id: int | None = None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -47,16 +47,30 @@ class ProductDialog(QDialog):
         layout = QVBoxLayout(self)
         form = QFormLayout()
         self.code_input, self.name_input = QLineEdit(), QLineEdit()
+        self.code_input.setReadOnly(True)
+        self.code_input.setPlaceholderText("Kaydedilince otomatik oluşturulur")
         self.category_input = QComboBox()
         self.category_input.setEditable(True)
         self.category_input.addItems(self.CATEGORIES)
         self.unit_input, self.price_input = QLineEdit("Adet"), QLineEdit("0")
-        form.addRow("Ürün kodu", self.code_input)
+        self.price_type_input = QComboBox()
+        self.price_type_input.addItems(["KDV hariç fiyat", "KDV dahil fiyat"])
+        self.vat_input = QLineEdit("20")
+        self.price_summary = QLabel()
+        self.price_summary.setStyleSheet("color: #17A2A4; font-weight: 600;")
+        form.addRow("Ürün kodu (otomatik)", self.code_input)
         form.addRow("Ürün adı", self.name_input)
         form.addRow("Kategori", self.category_input)
         form.addRow("Birim", self.unit_input)
-        form.addRow("Birim fiyat", self.price_input)
+        form.addRow("Fiyat giriş tipi", self.price_type_input)
+        form.addRow("Girilen birim fiyat", self.price_input)
+        form.addRow("Ürün KDV oranı (%)", self.vat_input)
+        form.addRow("Hesaplanan fiyatlar", self.price_summary)
         layout.addLayout(form)
+        self.price_input.textChanged.connect(self.update_price_summary)
+        self.vat_input.textChanged.connect(self.update_price_summary)
+        self.price_type_input.currentTextChanged.connect(self.update_price_summary)
+        self.update_price_summary()
 
         image_row = QHBoxLayout()
         self.image_preview = ThumbnailLabel(None, 88)
@@ -87,6 +101,8 @@ class ProductDialog(QDialog):
         self.category_input.setCurrentText(product["kategori"] or "")
         self.unit_input.setText(product["birim"])
         self.price_input.setText(str(product["birim_fiyat"]))
+        self.vat_input.setText(str(product["kdv_orani"]))
+        self.price_type_input.setCurrentIndex(0)
         self.image_name.setText(product["image_path"] or "Görsel seçilmedi")
         existing_image = resolve_image_path(product["image_path"])
         pixmap = QPixmap(str(existing_image)) if existing_image else QPixmap()
@@ -108,12 +124,14 @@ class ProductDialog(QDialog):
             self.image_preview.setPixmap(pixmap.scaled(84, 84, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
     def save_product(self) -> None:
-        if not self.code_input.text().strip() or not self.name_input.text().strip():
-            QMessageBox.warning(self, "Eksik bilgi", "Ürün kodu ve ürün adı zorunludur.")
+        if not self.name_input.text().strip():
+            QMessageBox.warning(self, "Eksik bilgi", "Ürün adı zorunludur.")
             return
         try:
+            net_price, _, _ = self.calculated_prices()
             values = dict(kod=self.code_input.text(), ad=self.name_input.text(), kategori=self.category_input.currentText(),
-                          birim=self.unit_input.text(), birim_fiyat=float(self.price_input.text().replace(",", ".")),
+                          birim=self.unit_input.text(), birim_fiyat=net_price,
+                          kdv_orani=float(self.vat_input.text().replace(",", ".")),
                           source_image=self.image_source)
             if self.product_id:
                 update_product(self.connection, product_id=self.product_id, **values)
@@ -124,6 +142,26 @@ class ProductDialog(QDialog):
             QMessageBox.warning(self, "Ürün kaydedilemedi", str(error))
             return
         self.done(product_id)
+
+    def calculated_prices(self) -> tuple[float, float, float]:
+        entered = float(self.price_input.text().replace(",", "."))
+        vat_rate = float(self.vat_input.text().replace(",", "."))
+        if entered < 0 or vat_rate < 0:
+            raise ValueError("Fiyat ve KDV oranı negatif olamaz.")
+        if self.price_type_input.currentIndex() == 1:
+            gross = entered
+            net = gross / (1 + vat_rate / 100) if vat_rate else gross
+        else:
+            net = entered
+            gross = net * (1 + vat_rate / 100)
+        return net, gross - net, gross
+
+    def update_price_summary(self) -> None:
+        try:
+            net, vat, gross = self.calculated_prices()
+            self.price_summary.setText(f"KDV'siz: {net:.2f} ₺  |  KDV: {vat:.2f} ₺  |  KDV'li: {gross:.2f} ₺")
+        except ValueError:
+            self.price_summary.setText("Geçerli fiyat ve KDV oranı girin.")
 
 
 class ProjectDialog(QDialog):
@@ -243,7 +281,9 @@ class MainWindow(QMainWindow):
             filters.addWidget(QLabel("Görünüm"))
             filters.addWidget(self.catalog_image_filter)
             layout.addLayout(filters)
-            self.catalog_table = DataTable(["Görsel", "Kod", "Ürün adı", "Kategori", "Birim", "Fiyat"])
+            self.catalog_table = DataTable([
+                "Görsel", "Kod", "Ürün adı", "Kategori", "Birim", "KDV'siz", "KDV %", "KDV", "KDV'li"
+            ])
             self.catalog_table.setColumnWidth(0, 72)
             layout.addWidget(self.catalog_table)
             self.catalog_search.textChanged.connect(self.refresh_catalog)
@@ -276,8 +316,12 @@ class MainWindow(QMainWindow):
         elif page_key == "Projeler":
             new_project = PrimaryButton("+ Yeni Proje")
             new_project.clicked.connect(self.open_project_dialog)
-            layout.addWidget(page_actions(new_project))
+            self.delete_project_button = SecondaryButton("Projeyi Sil")
+            self.delete_project_button.clicked.connect(self.delete_selected_project)
+            self.delete_project_button.setEnabled(False)
+            layout.addWidget(page_actions(self.delete_project_button, new_project))
             self.project_table = DataTable(["Proje adı", "Proje türü", "Müşteri", "Açıklama"])
+            self.project_table.itemSelectionChanged.connect(self.update_project_actions)
             layout.addWidget(self.project_table)
             self.refresh_projects()
         elif page_key == "Hesaplama":
@@ -333,8 +377,8 @@ class MainWindow(QMainWindow):
             self.refresh_customers()
         elif page_key == "Ayarlar":
             values=get_settings(self.connection); card = Card("Firma bilgileri")
-            self.firma_adi, self.firma_tel, self.firma_eposta, self.firma_adres, self.firma_vergi_dairesi, self.firma_vergi_no, self.firma_iban, self.firma_kdv = QLineEdit(values['firma_adi']), QLineEdit(values['telefon']), QLineEdit(values['eposta']), QLineEdit(values['adres']), QLineEdit(values['vergi_dairesi']), QLineEdit(values['vergi_no']), QLineEdit(values['iban']), QLineEdit(values['kdv_orani'])
-            for label,field in [("Firma adı",self.firma_adi),("Telefon",self.firma_tel),("E-posta",self.firma_eposta),("Adres",self.firma_adres),("Vergi dairesi",self.firma_vergi_dairesi),("VKN",self.firma_vergi_no),("IBAN",self.firma_iban),("KDV oranı (%)",self.firma_kdv)]: card.layout.addWidget(QLabel(label)); card.layout.addWidget(field)
+            self.firma_adi, self.firma_tel, self.firma_eposta, self.firma_adres, self.firma_vergi_dairesi, self.firma_vergi_no, self.firma_iban = QLineEdit(values['firma_adi']), QLineEdit(values['telefon']), QLineEdit(values['eposta']), QLineEdit(values['adres']), QLineEdit(values['vergi_dairesi']), QLineEdit(values['vergi_no']), QLineEdit(values['iban'])
+            for label,field in [("Firma adı",self.firma_adi),("Telefon",self.firma_tel),("E-posta",self.firma_eposta),("Adres",self.firma_adres),("Vergi dairesi",self.firma_vergi_dairesi),("VKN",self.firma_vergi_no),("IBAN",self.firma_iban)]: card.layout.addWidget(QLabel(label)); card.layout.addWidget(field)
             logo=SecondaryButton("Logo Yükle"); logo.clicked.connect(self.select_company_logo); save=PrimaryButton("Ayarları Kaydet"); save.clicked.connect(self.save_company_settings); card.layout.addWidget(page_actions(logo,save))
             layout.addWidget(card)
             layout.addStretch()
@@ -405,6 +449,33 @@ class MainWindow(QMainWindow):
                 if column == 0:
                     item.setData(Qt.UserRole, project["id"])
                 self.project_table.setItem(row, column, item)
+        self.update_project_actions()
+
+    def selected_project_id(self) -> int | None:
+        items = self.project_table.selectedItems()
+        return self.project_table.item(items[0].row(), 0).data(Qt.UserRole) if items else None
+
+    def update_project_actions(self) -> None:
+        self.delete_project_button.setEnabled(self.selected_project_id() is not None)
+
+    def delete_selected_project(self) -> None:
+        project_id = self.selected_project_id()
+        if project_id is None:
+            return
+        answer = QMessageBox.question(
+            self, "Projeyi sil",
+            "Seçili proje listeden kaldırılacak. Projeye bağlı eski siparişler korunacak. Devam edilsin mi?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            soft_delete_project(self.connection, project_id)
+        except (ValueError, sqlite3.Error) as error:
+            QMessageBox.warning(self, "Proje silinemedi", str(error))
+            return
+        self.refresh_projects()
 
     def open_weight_calculator(self) -> None:
         WeightCalculatorDialog(self.connection, self, allow_add_to_cart=False).exec()
@@ -523,9 +594,7 @@ class MainWindow(QMainWindow):
         self.company_logo_source=path or None
 
     def save_company_settings(self) -> None:
-        try: kdv=float(self.firma_kdv.text().replace(',','.')); assert kdv>=0
-        except (ValueError,AssertionError): QMessageBox.warning(self,"Geçersiz KDV","KDV oranı negatif olamaz."); return
-        save_settings(self.connection,{"firma_adi":self.firma_adi.text(),"telefon":self.firma_tel.text(),"eposta":self.firma_eposta.text(),"adres":self.firma_adres.text(),"vergi_dairesi":self.firma_vergi_dairesi.text(),"vergi_no":self.firma_vergi_no.text(),"iban":self.firma_iban.text(),"kdv_orani":str(kdv)},getattr(self,'company_logo_source',None))
+        save_settings(self.connection,{"firma_adi":self.firma_adi.text(),"telefon":self.firma_tel.text(),"eposta":self.firma_eposta.text(),"adres":self.firma_adres.text(),"vergi_dairesi":self.firma_vergi_dairesi.text(),"vergi_no":self.firma_vergi_no.text(),"iban":self.firma_iban.text()},getattr(self,'company_logo_source',None))
 
     def refresh_customers(self) -> None:
         customers = list_customers(self.connection, search=self.customer_search.text(),
@@ -590,7 +659,11 @@ class MainWindow(QMainWindow):
             row = self.catalog_table.rowCount()
             self.catalog_table.insertRow(row)
             self.catalog_table.setCellWidget(row, 0, ThumbnailLabel(product["image_path"]))
-            values = [product["kod"], product["ad"], product["kategori"] or "-", product["birim"], f"{product['birim_fiyat']:.2f} ₺"]
+            net = float(product["birim_fiyat"])
+            vat_rate = float(product["kdv_orani"])
+            vat = net * vat_rate / 100
+            values = [product["kod"], product["ad"], product["kategori"] or "-", product["birim"],
+                      f"{net:.2f} ₺", f"%{vat_rate:g}", f"{vat:.2f} ₺", f"{net + vat:.2f} ₺"]
             for column, value in enumerate(values, 1):
                 item = QTableWidgetItem(value)
                 if column == 1:

@@ -22,3 +22,14 @@ def create_project(connection: sqlite3.Connection, *, ad: str, proje_tipi: str,
             (ad, proje_tipi, musteri_id, aciklama.strip()),
         )
     return int(cursor.lastrowid)
+
+
+def soft_delete_project(connection: sqlite3.Connection, project_id: int) -> None:
+    """Projeyi ilişkili siparişleri bozmadan aktif listeden kaldırır."""
+    cursor = connection.execute(
+        "UPDATE projeler SET aktif = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND aktif = 1",
+        (project_id,),
+    )
+    if cursor.rowcount == 0:
+        raise ValueError("Proje bulunamadı.")
+    connection.commit()

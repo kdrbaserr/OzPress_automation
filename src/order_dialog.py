@@ -83,7 +83,7 @@ class OrderDialog(QDialog):
         layout.addLayout(extra_row)
 
         self.cart_table = QTableWidget(0, 5)
-        self.cart_table.setHorizontalHeaderLabels(["Kalem", "Miktar", "Birim fiyat / Tutar", "Ara toplam", "İşlem"])
+        self.cart_table.setHorizontalHeaderLabels(["Kalem", "Miktar", "KDV'siz birim fiyat", "KDV'li toplam", "İşlem"])
         self.cart_table.verticalHeader().setVisible(False)
         self.cart_table.setMinimumHeight(270)
         header = self.cart_table.horizontalHeader()
@@ -133,8 +133,9 @@ class OrderDialog(QDialog):
         self.product.addItem("Ürün seçin", None)
         for product in list_products(self.connection):
             self.product.addItem(
-                f"{product['kod']} — {product['ad']} ({product['birim_fiyat']:.2f} ₺)",
-                {"id": product["id"], "ad": product["ad"], "fiyat": product["birim_fiyat"]},
+                f"{product['kod']} — {product['ad']} ({product['birim_fiyat']:.2f} ₺ + %{product['kdv_orani']:g} KDV)",
+                {"id": product["id"], "ad": product["ad"], "fiyat": product["birim_fiyat"],
+                 "kdv_orani": product["kdv_orani"]},
             )
 
     def add_to_cart(self) -> None:
@@ -143,7 +144,8 @@ class OrderDialog(QDialog):
             QMessageBox.warning(self, "Ürün seçin", "Sepete eklemek için katalogdan bir ürün seçin.")
             return
         self.cart.append({"tip": "urun", "urun_id": product["id"], "ad": product["ad"], "miktar": self.quantity.value(),
-                          "birim_fiyat": product["fiyat"], "katalog_fiyat": product["fiyat"]})
+                          "birim_fiyat": product["fiyat"], "katalog_fiyat": product["fiyat"],
+                          "kdv_orani": product["kdv_orani"]})
         self.render_cart()
 
     def open_weight_calculator(self) -> None:
@@ -207,7 +209,8 @@ class OrderDialog(QDialog):
     def line_total(item: dict[str, float | int | str]) -> float:
         if item["tip"] == "ekstra":
             return float(item["tutar"])
-        return float(item["miktar"]) * float(item["birim_fiyat"])
+        net = float(item["miktar"]) * float(item["birim_fiyat"])
+        return net * (1 + float(item.get("kdv_orani", 0)) / 100)
 
     def cart_total(self) -> float:
         return sum(self.line_total(item) for item in self.cart)

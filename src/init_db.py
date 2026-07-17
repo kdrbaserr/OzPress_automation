@@ -27,7 +27,15 @@ def _apply_schema_upgrades(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE siparisler ADD COLUMN proje_tipi TEXT NOT NULL DEFAULT 'Diğer'")
     if "proje_id" not in columns:
         connection.execute("ALTER TABLE siparisler ADD COLUMN proje_id INTEGER REFERENCES projeler(id) ON DELETE SET NULL")
+    if "kdv_toplam" not in columns:
+        connection.execute("ALTER TABLE siparisler ADD COLUMN kdv_toplam REAL NOT NULL DEFAULT 0")
     connection.execute("CREATE INDEX IF NOT EXISTS idx_siparisler_proje_id ON siparisler(proje_id)")
+    product_columns = {row[1] for row in connection.execute("PRAGMA table_info(urunler)")}
+    if "kdv_orani" not in product_columns:
+        connection.execute("ALTER TABLE urunler ADD COLUMN kdv_orani REAL NOT NULL DEFAULT 0")
+    line_columns = {row[1] for row in connection.execute("PRAGMA table_info(siparis_kalemleri)")}
+    if "kdv_orani" not in line_columns:
+        connection.execute("ALTER TABLE siparis_kalemleri ADD COLUMN kdv_orani REAL NOT NULL DEFAULT 0")
     customer_columns = {row[1] for row in connection.execute("PRAGMA table_info(musteriler)")}
     if "notlar" not in customer_columns:
         connection.execute("ALTER TABLE musteriler ADD COLUMN notlar TEXT")

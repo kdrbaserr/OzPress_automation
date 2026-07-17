@@ -1,27 +1,33 @@
 """Ürün kartlarının kalıcı SQLite işlemleri."""
 import sqlite3
+from uuid import uuid4
 
 from images import store_product_image
 
 
 def create_product(
-    connection: sqlite3.Connection, *, kod: str, ad: str, kategori: str | None, birim: str, birim_fiyat: float,
-    source_image: str | None = None,
+    connection: sqlite3.Connection, *, kod: str = "", ad: str, kategori: str | None, birim: str, birim_fiyat: float,
+    kdv_orani: float = 0, source_image: str | None = None,
 ) -> int:
     """Ürünü kaydeder; görsel seçilmişse yalnızca göreli image_path saklanır."""
     image_path = store_product_image(source_image) if source_image else None
-    cursor = connection.execute(
-        """INSERT INTO urunler (kod, ad, kategori, birim, birim_fiyat, image_path)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (kod.strip(), ad.strip(), (kategori or "").strip() or None, birim.strip() or "Adet", birim_fiyat, image_path),
-    )
-    connection.commit()
-    return cursor.lastrowid
+    with connection:
+        temporary_code = kod.strip() or f"AUTO-{uuid4().hex}"
+        cursor = connection.execute(
+            """INSERT INTO urunler (kod, ad, kategori, birim, birim_fiyat, kdv_orani, image_path)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (temporary_code, ad.strip(), (kategori or "").strip() or None, birim.strip() or "Adet", birim_fiyat,
+             kdv_orani, image_path),
+        )
+        product_id = int(cursor.lastrowid)
+        if not kod.strip():
+            connection.execute("UPDATE urunler SET kod = ? WHERE id = ?", (f"URN-{product_id:06d}", product_id))
+    return product_id
 
 
 def update_product(
     connection: sqlite3.Connection, *, product_id: int, kod: str, ad: str, kategori: str | None, birim: str,
-    birim_fiyat: float, source_image: str | None = None,
+    birim_fiyat: float, kdv_orani: float = 0, source_image: str | None = None,
 ) -> None:
     """Ürün bilgilerini günceller; yeni görsel seçilmezse mevcut yol korunur."""
     if source_image:
@@ -33,9 +39,10 @@ def update_product(
         image_values = ()
     connection.execute(
         f"""UPDATE urunler
-            SET kod = ?, ad = ?, kategori = ?, birim = ?, birim_fiyat = ?, updated_at = CURRENT_TIMESTAMP{image_sql}
+            SET kod = ?, ad = ?, kategori = ?, birim = ?, birim_fiyat = ?, kdv_orani = ?, updated_at = CURRENT_TIMESTAMP{image_sql}
             WHERE id = ? AND aktif = 1""",
-        (kod.strip(), ad.strip(), (kategori or "").strip() or None, birim.strip() or "Adet", birim_fiyat, *image_values, product_id),
+        (kod.strip(), ad.strip(), (kategori or "").strip() or None, birim.strip() or "Adet", birim_fiyat,
+         kdv_orani, *image_values, product_id),
     )
     connection.commit()
 
@@ -89,6 +96,6 @@ def list_products(
         filters.append("(image_path IS NULL OR image_path = '')")
     connection.row_factory = sqlite3.Row
     return connection.execute(
-        f"SELECT id, kod, ad, kategori, birim, birim_fiyat, image_path FROM urunler WHERE {' AND '.join(filters)} ORDER BY ad",
+        f"SELECT id, kod, ad, kategori, birim, birim_fiyat, kdv_orani, image_path FROM urunler WHERE {' AND '.join(filters)} ORDER BY ad",
         values,
     ).fetchall()
