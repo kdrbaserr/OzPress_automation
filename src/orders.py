@@ -58,6 +58,62 @@ def list_orders(connection: sqlite3.Connection) -> list[sqlite3.Row]:
     ).fetchall()
 
 
+def get_order_for_edit(connection: sqlite3.Connection, order_id: int) -> tuple[sqlite3.Row, list[dict]]:
+    connection.row_factory = sqlite3.Row
+    order = connection.execute("SELECT * FROM siparisler WHERE id = ?", (order_id,)).fetchone()
+    if not order:
+        raise ValueError("Sipariş bulunamadı.")
+    products = connection.execute(
+        """SELECT 'urun' AS tip, k.urun_id, u.ad, k.miktar, k.birim_fiyat, k.kdv_orani
+           FROM siparis_kalemleri k JOIN urunler u ON u.id=k.urun_id WHERE k.siparis_id=? ORDER BY k.id""",
+        (order_id,),
+    ).fetchall()
+    extras = connection.execute(
+        "SELECT 'ekstra' AS tip, aciklama, satir_toplami AS tutar FROM ekstra_kalemler WHERE siparis_id=? ORDER BY id",
+        (order_id,),
+    ).fetchall()
+    return order, [dict(row) for row in (*products, *extras)]
+
+
+def update_order(connection: sqlite3.Connection, *, order_id: int, musteri_id: int, proje_tipi: str,
+                 items: list[dict[str, float | int | str]], proje_id: int | None = None) -> None:
+    if not items:
+        raise ValueError("Sipariş sepeti boş olamaz.")
+    product_items = [item for item in items if item["tip"] == "urun"]
+    extra_items = [item for item in items if item["tip"] == "ekstra"]
+    product_total = sum(float(item["miktar"]) * float(item["birim_fiyat"]) for item in product_items)
+    vat_total = sum(float(item["miktar"]) * float(item["birim_fiyat"]) * float(item.get("kdv_orani", 0)) / 100
+                    for item in product_items)
+    extra_total = sum(float(item["tutar"]) for item in extra_items)
+    total = product_total + vat_total + extra_total
+    with connection:
+        cursor = connection.execute(
+            """UPDATE siparisler SET musteri_id=?, proje_id=?, proje_tipi=?, ara_toplam=?, ekstra_toplam=?,
+                      kdv_toplam=?, genel_toplam=?, updated_at=CURRENT_TIMESTAMP WHERE id=?""",
+            (musteri_id, proje_id, proje_tipi, product_total, extra_total, vat_total, total, order_id),
+        )
+        if cursor.rowcount == 0:
+            raise ValueError("Sipariş bulunamadı.")
+        connection.execute("DELETE FROM siparis_kalemleri WHERE siparis_id=?", (order_id,))
+        connection.execute("DELETE FROM ekstra_kalemler WHERE siparis_id=?", (order_id,))
+        connection.executemany(
+            """INSERT INTO siparis_kalemleri (siparis_id, urun_id, miktar, birim_fiyat, kdv_orani, satir_toplami)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            [(order_id, int(item["urun_id"]), float(item["miktar"]), float(item["birim_fiyat"]),
+              float(item.get("kdv_orani", 0)), float(item["miktar"]) * float(item["birim_fiyat"]))
+             for item in product_items],
+        )
+        connection.executemany(
+            """INSERT INTO ekstra_kalemler (siparis_id, aciklama, miktar, birim_fiyat, satir_toplami)
+               VALUES (?, ?, 1, ?, ?)""",
+            [(order_id, str(item["aciklama"]), float(item["tutar"]), float(item["tutar"])) for item in extra_items],
+        )
+        connection.execute(
+            "UPDATE cari_hareketler SET musteri_id=?, tutar=? WHERE siparis_id=? AND hareket_tipi='Borç'",
+            (musteri_id, total, order_id),
+        )
+
+
 def delete_order(connection: sqlite3.Connection, order_id: int) -> None:
     """Siparişi ve bu siparişin oluşturduğu cari hareketleri birlikte siler."""
     exists = connection.execute("SELECT 1 FROM siparisler WHERE id = ?", (order_id,)).fetchone()
