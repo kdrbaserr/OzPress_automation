@@ -10,7 +10,8 @@ def list_customers(connection: sqlite3.Connection) -> list[sqlite3.Row]:
 
 
 def create_order(
-    connection: sqlite3.Connection, *, musteri_id: int, proje_tipi: str, items: list[dict[str, float | int | str]]
+    connection: sqlite3.Connection, *, musteri_id: int, proje_tipi: str, items: list[dict[str, float | int | str]],
+    proje_id: int | None = None,
 ) -> int:
     """Sepet kalemlerini tek işlemde kalıcı sipariş ve alt kalemlerine dönüştürür."""
     if not items:
@@ -23,9 +24,9 @@ def create_order(
     order_number = f"SP-{datetime.now():%Y%m%d}-{uuid4().hex[:6].upper()}"
     with connection:
         cursor = connection.execute(
-            """INSERT INTO siparisler (siparis_no, musteri_id, proje_tipi, ara_toplam, ekstra_toplam, genel_toplam)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (order_number, musteri_id, proje_tipi, product_total, extra_total, total),
+            """INSERT INTO siparisler (siparis_no, musteri_id, proje_id, proje_tipi, ara_toplam, ekstra_toplam, genel_toplam)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (order_number, musteri_id, proje_id, proje_tipi, product_total, extra_total, total),
         )
         order_id = cursor.lastrowid
         connection.executemany(
@@ -46,8 +47,19 @@ def list_orders(connection: sqlite3.Connection) -> list[sqlite3.Row]:
     connection.row_factory = sqlite3.Row
     return connection.execute(
         """SELECT s.id, s.siparis_no, m.unvan AS musteri, s.siparis_tarihi, s.durum, s.genel_toplam
-           FROM siparisler s JOIN musteriler m ON m.id = s.musteri_id ORDER BY s.created_at DESC"""
+           FROM siparisler s JOIN musteriler m ON m.id = s.musteri_id
+           ORDER BY s.created_at DESC, s.id DESC"""
     ).fetchall()
+
+
+def delete_order(connection: sqlite3.Connection, order_id: int) -> None:
+    """Siparişi ve bu siparişin oluşturduğu cari hareketleri birlikte siler."""
+    exists = connection.execute("SELECT 1 FROM siparisler WHERE id = ?", (order_id,)).fetchone()
+    if not exists:
+        raise ValueError("Sipariş bulunamadı.")
+    with connection:
+        connection.execute("DELETE FROM cari_hareketler WHERE siparis_id = ?", (order_id,))
+        connection.execute("DELETE FROM siparisler WHERE id = ?", (order_id,))
 
 
 def confirm_order(connection: sqlite3.Connection, order_id: int) -> None:

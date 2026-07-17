@@ -3,6 +3,17 @@ import sqlite3
 from uuid import uuid4
 
 
+def format_customer_balance(balance: float) -> str:
+    """Bakiyeyi müşteri açısından anlaşılır durum bilgisiyle gösterir."""
+    if balance > 0:
+        status = "Müşteri borçlu"
+    elif balance < 0:
+        status = "Müşteri alacaklı"
+    else:
+        status = "Hesap kapalı"
+    return f"{balance:.2f} ₺ ({status})"
+
+
 BALANCE_EXPRESSION = "COALESCE(SUM(CASE WHEN h.hareket_tipi = 'Borç' THEN h.tutar ELSE -h.tutar END), 0)"
 
 

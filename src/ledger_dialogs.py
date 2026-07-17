@@ -5,7 +5,7 @@ from PySide6.QtCore import QDate
 from PySide6.QtWidgets import QComboBox, QDateEdit, QDialog, QDoubleSpinBox, QFormLayout, QLabel, QMessageBox, QTableWidgetItem, QVBoxLayout, QWidget
 
 from components import DataTable, PrimaryButton, SecondaryButton, page_actions
-from customers import list_customers
+from customers import format_customer_balance, list_customers
 from ledger import account_statement, record_collection
 
 
@@ -68,7 +68,8 @@ class StatementDialog(QDialog):
             row = table.rowCount()
             table.insertRow(row)
             values = [movement["hareket_tarihi"], movement["aciklama"] or "-", f"{movement['borc']:.2f} ₺" if movement["borc"] else "-",
-                      f"{movement['alacak']:.2f} ₺" if movement["alacak"] else "-", f"{movement['bakiye']:.2f} ₺",
+                      f"{movement['alacak']:.2f} ₺" if movement["alacak"] else "-",
+                      format_customer_balance(float(movement["bakiye"])),
                       movement["odeme_sekli"] or "-"]
             for column, value in enumerate(values):
                 table.setItem(row, column, QTableWidgetItem(value))

@@ -36,10 +36,23 @@ CREATE TABLE IF NOT EXISTS musteriler (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS projeler (
+    id INTEGER PRIMARY KEY,
+    ad TEXT NOT NULL,
+    proje_tipi TEXT NOT NULL,
+    musteri_id INTEGER,
+    aciklama TEXT,
+    aktif INTEGER NOT NULL DEFAULT 1 CHECK (aktif IN (0, 1)),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (musteri_id) REFERENCES musteriler(id) ON DELETE SET NULL ON UPDATE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS siparisler (
     id INTEGER PRIMARY KEY,
     siparis_no TEXT NOT NULL UNIQUE,
     musteri_id INTEGER NOT NULL,
+    proje_id INTEGER,
     siparis_tarihi TEXT NOT NULL DEFAULT CURRENT_DATE,
     proje_tipi TEXT NOT NULL DEFAULT 'Diğer',
     durum TEXT NOT NULL DEFAULT 'Taslak'
@@ -50,7 +63,8 @@ CREATE TABLE IF NOT EXISTS siparisler (
     aciklama TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (musteri_id) REFERENCES musteriler(id) ON DELETE RESTRICT ON UPDATE CASCADE
+    FOREIGN KEY (musteri_id) REFERENCES musteriler(id) ON DELETE RESTRICT ON UPDATE CASCADE,
+    FOREIGN KEY (proje_id) REFERENCES projeler(id) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS siparis_kalemleri (
@@ -96,6 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_urunler_ad ON urunler(ad);
 CREATE INDEX IF NOT EXISTS idx_urunler_kategori ON urunler(kategori);
 CREATE INDEX IF NOT EXISTS idx_musteriler_unvan ON musteriler(unvan);
 CREATE INDEX IF NOT EXISTS idx_siparisler_musteri_id ON siparisler(musteri_id);
+CREATE INDEX IF NOT EXISTS idx_projeler_musteri_id ON projeler(musteri_id);
 CREATE INDEX IF NOT EXISTS idx_siparisler_tarih ON siparisler(siparis_tarihi);
 CREATE INDEX IF NOT EXISTS idx_siparisler_durum ON siparisler(durum);
 CREATE INDEX IF NOT EXISTS idx_siparis_kalemleri_siparis_id ON siparis_kalemleri(siparis_id);
