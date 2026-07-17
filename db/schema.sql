@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS projeler (
     proje_tipi TEXT NOT NULL,
     musteri_id INTEGER,
     aciklama TEXT,
+    maliyet REAL CHECK (maliyet IS NULL OR maliyet >= 0),
+    proje_degeri REAL CHECK (proje_degeri IS NULL OR proje_degeri >= 0),
     aktif INTEGER NOT NULL DEFAULT 1 CHECK (aktif IN (0, 1)),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -18,7 +18,7 @@ from orders import confirm_order, delete_order, list_orders
 from output_dialog import OutputDialog
 from settings import get_settings, save_settings
 from products import create_product, get_product, list_categories, list_products, soft_delete_product, update_product
-from projects import create_project, list_projects, soft_delete_project
+from projects import create_project, get_project, list_projects, soft_delete_project, update_project
 from weight_calculator import WeightCalculatorDialog
 
 
@@ -165,10 +165,12 @@ class ProductDialog(QDialog):
 
 
 class ProjectDialog(QDialog):
-    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None) -> None:
+    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None,
+                 project_id: int | None = None) -> None:
         super().__init__(parent)
         self.connection = connection
-        self.setWindowTitle("Yeni Proje")
+        self.project_id = project_id
+        self.setWindowTitle("Projeyi Düzenle" if project_id else "Yeni Proje")
         self.setMinimumWidth(440)
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -181,26 +183,64 @@ class ProjectDialog(QDialog):
         for customer in list_customers(connection):
             self.customer_input.addItem(f"{customer['kod']} — {customer['unvan']}", customer["id"])
         self.description_input = QLineEdit()
+        self.cost_input = QLineEdit()
+        self.cost_input.setPlaceholderText("İsteğe bağlı; örn. 12500,50")
+        self.value_input = QLineEdit()
+        self.value_input.setPlaceholderText("Müşteriden alınacak tutar (isteğe bağlı)")
         form.addRow("Proje adı", self.name_input)
         form.addRow("Proje türü", self.type_input)
         form.addRow("Müşteri", self.customer_input)
         form.addRow("Açıklama", self.description_input)
+        form.addRow("Maliyet", self.cost_input)
+        form.addRow("Proje değeri", self.value_input)
         layout.addLayout(form)
         cancel, save = SecondaryButton("Vazgeç"), PrimaryButton("Projeyi Kaydet")
         cancel.clicked.connect(self.reject)
         save.clicked.connect(self.save_project)
         layout.addWidget(page_actions(cancel, save))
+        if project_id:
+            self.load_project()
+
+    def load_project(self) -> None:
+        project = get_project(self.connection, self.project_id)
+        if not project:
+            self.reject()
+            return
+        self.name_input.setText(project["ad"])
+        self.type_input.setCurrentText(project["proje_tipi"])
+        customer_index = self.customer_input.findData(project["musteri_id"])
+        if customer_index >= 0:
+            self.customer_input.setCurrentIndex(customer_index)
+        self.description_input.setText(project["aciklama"] or "")
+        self.cost_input.setText("" if project["maliyet"] is None else str(project["maliyet"]))
+        self.value_input.setText("" if project["proje_degeri"] is None else str(project["proje_degeri"]))
 
     def save_project(self) -> None:
         try:
-            project_id = create_project(
-                self.connection, ad=self.name_input.text(), proje_tipi=self.type_input.currentText(),
-                musteri_id=self.customer_input.currentData(), aciklama=self.description_input.text(),
-            )
+            cost = self.optional_amount(self.cost_input.text())
+            project_value = self.optional_amount(self.value_input.text())
+            values = dict(ad=self.name_input.text(), proje_tipi=self.type_input.currentText(),
+                          musteri_id=self.customer_input.currentData(), aciklama=self.description_input.text(),
+                          maliyet=cost, proje_degeri=project_value)
+            if self.project_id:
+                update_project(self.connection, project_id=self.project_id, **values)
+                project_id = self.project_id
+            else:
+                project_id = create_project(self.connection, **values)
         except (ValueError, sqlite3.Error) as error:
             QMessageBox.warning(self, "Proje kaydedilemedi", str(error))
             return
         self.done(project_id)
+
+    @staticmethod
+    def optional_amount(text: str) -> float | None:
+        text = text.strip()
+        if not text:
+            return None
+        value = float(text.replace(",", "."))
+        if value < 0:
+            raise ValueError("Tutar negatif olamaz.")
+        return value
 
 
 class MainWindow(QMainWindow):
@@ -297,6 +337,8 @@ class MainWindow(QMainWindow):
             layout.addWidget(page_actions(new_order))
             self.delete_order_button = SecondaryButton("Siparişi Sil")
             self.delete_order_button.clicked.connect(self.delete_selected_order)
+            self.edit_order_button = SecondaryButton("Siparişi Düzenle")
+            self.edit_order_button.clicked.connect(self.edit_selected_order)
             self.invoice_button = PrimaryButton("Fatura PDF Oluştur")
             self.invoice_button.clicked.connect(lambda: self.open_selected_order_output("Fatura"))
             self.order_pdf_button = PrimaryButton("Sipariş PDF Oluştur")
@@ -304,7 +346,8 @@ class MainWindow(QMainWindow):
             self.confirm_order_button = SecondaryButton("Siparişi Onayla")
             self.confirm_order_button.clicked.connect(self.confirm_selected_order)
             self.order_actions = page_actions(
-                self.delete_order_button, self.confirm_order_button, self.order_pdf_button, self.invoice_button
+                self.delete_order_button, self.edit_order_button, self.confirm_order_button,
+                self.order_pdf_button, self.invoice_button
             )
             self.order_actions.setVisible(False)
             layout.addWidget(self.order_actions)
@@ -319,8 +362,13 @@ class MainWindow(QMainWindow):
             self.delete_project_button = SecondaryButton("Projeyi Sil")
             self.delete_project_button.clicked.connect(self.delete_selected_project)
             self.delete_project_button.setEnabled(False)
-            layout.addWidget(page_actions(self.delete_project_button, new_project))
-            self.project_table = DataTable(["Proje adı", "Proje türü", "Müşteri", "Açıklama"])
+            self.edit_project_button = SecondaryButton("Projeyi Düzenle")
+            self.edit_project_button.clicked.connect(self.edit_selected_project)
+            self.edit_project_button.setEnabled(False)
+            layout.addWidget(page_actions(self.delete_project_button, self.edit_project_button, new_project))
+            self.project_table = DataTable([
+                "Proje adı", "Proje türü", "Müşteri", "Maliyet", "Proje değeri", "Tahmini fark", "Açıklama"
+            ])
             self.project_table.itemSelectionChanged.connect(self.update_project_actions)
             layout.addWidget(self.project_table)
             self.refresh_projects()
@@ -435,8 +483,20 @@ class MainWindow(QMainWindow):
             self.refresh_orders()
             self.refresh_dashboard()
 
+    def edit_selected_order(self) -> None:
+        order_id = self.selected_order_id()
+        if order_id is not None and OrderDialog(self.connection, self, order_id=order_id).exec():
+            self.refresh_orders()
+            self.refresh_customers()
+            self.refresh_dashboard()
+
     def open_project_dialog(self) -> None:
         if ProjectDialog(self.connection, self).exec():
+            self.refresh_projects()
+
+    def edit_selected_project(self) -> None:
+        project_id = self.selected_project_id()
+        if project_id is not None and ProjectDialog(self.connection, self, project_id=project_id).exec():
             self.refresh_projects()
 
     def refresh_projects(self) -> None:
@@ -444,7 +504,15 @@ class MainWindow(QMainWindow):
         for project in list_projects(self.connection):
             row = self.project_table.rowCount()
             self.project_table.insertRow(row)
-            for column, value in enumerate((project["ad"], project["proje_tipi"], project["musteri"] or "-", project["aciklama"] or "-")):
+            cost, project_value = project["maliyet"], project["proje_degeri"]
+            difference = float(project_value) - float(cost) if cost is not None and project_value is not None else None
+            values = (
+                project["ad"], project["proje_tipi"], project["musteri"] or "-",
+                f"{float(cost):.2f} ₺" if cost is not None else "-",
+                f"{float(project_value):.2f} ₺" if project_value is not None else "-",
+                f"{difference:.2f} ₺" if difference is not None else "-", project["aciklama"] or "-",
+            )
+            for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 if column == 0:
                     item.setData(Qt.UserRole, project["id"])
@@ -456,7 +524,9 @@ class MainWindow(QMainWindow):
         return self.project_table.item(items[0].row(), 0).data(Qt.UserRole) if items else None
 
     def update_project_actions(self) -> None:
-        self.delete_project_button.setEnabled(self.selected_project_id() is not None)
+        has_selection = self.selected_project_id() is not None
+        self.delete_project_button.setEnabled(has_selection)
+        self.edit_project_button.setEnabled(has_selection)
 
     def delete_selected_project(self) -> None:
         project_id = self.selected_project_id()

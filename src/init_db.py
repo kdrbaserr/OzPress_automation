@@ -36,6 +36,11 @@ def _apply_schema_upgrades(connection: sqlite3.Connection) -> None:
     line_columns = {row[1] for row in connection.execute("PRAGMA table_info(siparis_kalemleri)")}
     if "kdv_orani" not in line_columns:
         connection.execute("ALTER TABLE siparis_kalemleri ADD COLUMN kdv_orani REAL NOT NULL DEFAULT 0")
+    project_columns = {row[1] for row in connection.execute("PRAGMA table_info(projeler)")}
+    if "maliyet" not in project_columns:
+        connection.execute("ALTER TABLE projeler ADD COLUMN maliyet REAL")
+    if "proje_degeri" not in project_columns:
+        connection.execute("ALTER TABLE projeler ADD COLUMN proje_degeri REAL")
     customer_columns = {row[1] for row in connection.execute("PRAGMA table_info(musteriler)")}
     if "notlar" not in customer_columns:
         connection.execute("ALTER TABLE musteriler ADD COLUMN notlar TEXT")

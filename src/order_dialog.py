@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 )
 
 from components import PrimaryButton, SecondaryButton, page_actions
-from orders import create_order, list_customers
+from orders import create_order, get_order_for_edit, list_customers, update_order
 from products import list_products, update_catalog_price
 from projects import list_projects
 from weight_calculator import WeightCalculatorDialog
@@ -17,11 +17,13 @@ from weight_calculator import WeightCalculatorDialog
 class OrderDialog(QDialog):
     PROJECT_TYPES = ["Konteyner Ev", "Panel Çatı", "Trapez Çatı", "Diğer"]
 
-    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None) -> None:
+    def __init__(self, connection: sqlite3.Connection, parent: QWidget | None = None,
+                 order_id: int | None = None) -> None:
         super().__init__(parent)
         self.connection = connection
+        self.order_id = order_id
         self.cart: list[dict[str, float | int | str]] = []
-        self.setWindowTitle("Yeni Sipariş / Proje")
+        self.setWindowTitle("Siparişi Düzenle" if order_id else "Yeni Sipariş / Proje")
         self.resize(950, 650)
         self.setMinimumWidth(900)
         layout = QVBoxLayout(self)
@@ -104,6 +106,33 @@ class OrderDialog(QDialog):
         save = PrimaryButton("Siparişi Kaydet")
         save.clicked.connect(self.save_order)
         layout.addWidget(page_actions(cancel, save))
+        if order_id:
+            self.load_order()
+
+    def load_order(self) -> None:
+        try:
+            order, items = get_order_for_edit(self.connection, self.order_id)
+        except ValueError as error:
+            QMessageBox.warning(self, "Sipariş açılamadı", str(error))
+            self.reject()
+            return
+        project_index = self.project.findData(order["proje_id"])
+        if project_index >= 0:
+            self.project.setCurrentIndex(project_index)
+        customer_index = self.customer.findData(order["musteri_id"])
+        if customer_index >= 0:
+            self.customer.setCurrentIndex(customer_index)
+        project_type = order["proje_tipi"]
+        if project_type in self.PROJECT_TYPES:
+            self.project_type.setCurrentText(project_type)
+        else:
+            self.project_type.setCurrentText(self.PROJECT_TYPES[-1])
+            self.custom_project_type.setText(project_type)
+        self.cart = items
+        for item in self.cart:
+            if item["tip"] == "urun":
+                item["katalog_fiyat"] = item["birim_fiyat"]
+        self.render_cart()
 
     def toggle_custom_project_type(self, project_type: str) -> None:
         self.custom_project_type.setVisible(project_type == self.PROJECT_TYPES[-1])
@@ -254,8 +283,13 @@ class OrderDialog(QDialog):
                 QMessageBox.warning(self, "Proje türü gerekli", "Diğer seçildiğinde proje türünü yazın.")
                 return
         try:
-            order_id = create_order(self.connection, musteri_id=customer_id, proje_tipi=project_type,
-                                    items=self.cart, proje_id=self.project.currentData())
+            if self.order_id:
+                update_order(self.connection, order_id=self.order_id, musteri_id=customer_id,
+                             proje_tipi=project_type, items=self.cart, proje_id=self.project.currentData())
+                order_id = self.order_id
+            else:
+                order_id = create_order(self.connection, musteri_id=customer_id, proje_tipi=project_type,
+                                        items=self.cart, proje_id=self.project.currentData())
         except (ValueError, sqlite3.Error) as error:
             QMessageBox.warning(self, "Sipariş kaydedilemedi", str(error))
             return
