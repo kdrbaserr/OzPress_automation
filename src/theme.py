@@ -14,6 +14,16 @@ COLORS = {
 
 APPLICATION_STYLESHEET = """
     QWidget { color: #132638; font-family: Segoe UI, Arial, sans-serif; }
+    QWidget#loginRoot { background: #132638; }
+    QFrame#loginPanel { background: #FFFFFF; border: 1px solid #2D4B62; border-radius: 18px; }
+    QLabel#loginLogo { background: transparent; border: 0; }
+    QLabel#loginTitle { color: #132638; font-size: 28px; font-weight: 800; letter-spacing: 2px; }
+    QLineEdit#passwordInput { background: #F7FAFC; color: #132638; border: 2px solid #B7C7D2; border-radius: 10px; padding: 13px 16px; min-height: 26px; font-size: 18px; }
+    QLineEdit#passwordInput:focus { border: 2px solid #17A2A4; }
+    QLabel#loginError { color: #C44536; font-size: 13px; font-weight: 600; }
+    QPushButton#loginButton { background: #17A2A4; color: #FFFFFF; border: 0; border-radius: 10px; padding: 14px; font-size: 16px; font-weight: 700; }
+    QPushButton#loginButton:hover { background: #13898B; }
+    QPushButton#loginButton:pressed { background: #107577; }
     QDialog { background: #F5F7FA; color: #132638; }
     QDialog QLabel, QDialog QCheckBox, QDialog QRadioButton { color: #132638; font-weight: 600; }
     QDialog QFormLayout QLabel { color: #132638; }
